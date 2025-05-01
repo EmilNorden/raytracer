@@ -1,0 +1,59 @@
+use std::path::Path;
+use nalgebra::Point3;
+use crate::acceleration::bounds::AABB;
+use crate::content::triangle::Triangle;
+use crate::core::Ray;
+use crate::scene::{Intersectable, Intersection};
+use crate::scene::scene::Scene;
+
+pub struct Mesh {
+    bounds: AABB,
+    triangles: Vec<Triangle>,
+}
+
+impl Mesh {
+    pub fn new<I: IntoIterator<Item = Triangle>>(triangle_iter: I) -> Self {
+        let triangles: Vec<Triangle> = triangle_iter.into_iter().collect();
+        let mut bounds = AABB::new(Point3::new(f32::MAX, f32::MAX, f32::MAX), Point3::new(f32::MIN, f32::MIN, f32::MIN));
+
+        for tri in &triangles {
+            bounds.expand(tri.v0().position);
+            bounds.expand(tri.v1().position);
+            bounds.expand(tri.v2().position);
+        }
+
+        Self {
+            bounds,
+            triangles: triangles.into_iter().collect()
+        }
+    }
+
+    pub fn triangles(&self) -> &[Triangle] {
+        self.triangles.as_slice()
+    }
+}
+
+impl Intersectable for Mesh {
+    fn bounds(&self) -> AABB {
+        self.bounds
+    }
+
+    fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Intersection> {
+        let mut best_dist = f32::MAX;
+        let mut closest_intersection = None;
+        for triangle in &self.triangles {
+            if let Some(intersection) = triangle.intersect(ray) {
+                if intersection.dist < best_dist {
+                    best_dist = intersection.dist;
+                    closest_intersection = Some(intersection);
+                }
+            }
+        }
+
+        closest_intersection
+    }
+}
+
+pub trait SceneLoader {
+    fn load_scene<P: AsRef<Path>>(path: P) -> anyhow::Result<Scene>;
+}
