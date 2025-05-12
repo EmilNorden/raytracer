@@ -1,5 +1,5 @@
 pub mod mesh;
-pub mod assimp_loader;
 pub mod triangle;
-pub mod assimp;
+pub mod gltf;
+pub mod scene_loader;
 //TODO: remove 'pub' from mod triangle

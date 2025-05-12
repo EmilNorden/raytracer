@@ -1,4 +1,5 @@
 use nalgebra::Matrix4;
+use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::Mesh;
 use crate::core::Ray;
 use crate::scene::{Intersectable, Intersection};
@@ -9,35 +10,32 @@ pub struct SceneNode {
     pub children: Vec<SceneNode>,
 }
 pub struct Scene {
+    pub camera: PerspectiveCamera, // TODO: Replace with camera trait
     meshes: Vec<Mesh>,
-    root: SceneNode,
 }
 
 impl Scene {
-    pub fn new(meshes: Vec<Mesh>, root: SceneNode) -> Self {
+    pub fn new(camera: PerspectiveCamera, meshes: Vec<Mesh>) -> Self {
         Self {
+            camera,
             meshes,
-            root,
         }
     }
 
     pub fn intersect(&self, ray: &Ray) -> Option<Intersection> {
-        /*let mut best_dist = f32::MAX;
+        let mut best_dist = f32::MAX;
         let mut best_hit = None;
-        for object in &self.objects {
-            let world_ray = ray.transform(object.inverse_world);
+        for object in &self.meshes {
 
-            if let Some(hit) = object.geometry.intersect(&world_ray, 0.0, f32::MAX) {
+            if let Some(hit) = object.intersect(ray, 0.0, f32::MAX) {
                 if hit.dist < best_dist {
                     best_dist = hit.dist;
                     best_hit = Some(hit);
                 }
             }
         }
-        best_hit
 
-         */
-        None
+        best_hit
     }
 }
 

@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 use nalgebra::Point3;
 use crate::acceleration::bounds::AABB;
 use crate::content::triangle::Triangle;
@@ -6,12 +7,16 @@ use crate::core::Ray;
 use crate::scene::{Intersectable, Intersection};
 use crate::scene::scene::Scene;
 
-pub struct Mesh {
+pub struct MeshData {
     bounds: AABB,
     triangles: Vec<Triangle>,
 }
+pub struct Mesh {
+    data: Arc<MeshData>,
+    inverse_transform: nalgebra::Matrix4<f32>,
+}
 
-impl Mesh {
+impl MeshData {
     pub fn new<I: IntoIterator<Item = Triangle>>(triangle_iter: I) -> Self {
         let triangles: Vec<Triangle> = triangle_iter.into_iter().collect();
         let mut bounds = AABB::new(Point3::new(f32::MAX, f32::MAX, f32::MAX), Point3::new(f32::MIN, f32::MIN, f32::MIN));
@@ -33,7 +38,7 @@ impl Mesh {
     }
 }
 
-impl Intersectable for Mesh {
+impl Intersectable for MeshData {
     fn bounds(&self) -> AABB {
         self.bounds
     }
@@ -54,6 +59,26 @@ impl Intersectable for Mesh {
     }
 }
 
-pub trait SceneLoader {
-    fn load_scene<P: AsRef<Path>>(path: P) -> anyhow::Result<Scene>;
+impl Mesh {
+    pub fn new(data: Arc<MeshData>, inverse_transform: nalgebra::Matrix4<f32>) -> Self {
+        Self {
+            data,
+            inverse_transform,
+        }
+    }
+}
+
+impl Intersectable for Mesh {
+    fn bounds(&self) -> AABB {
+        self.data.bounds()
+    }
+
+    fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Intersection> {
+        let object_space_ray = ray.transform(self.inverse_transform);
+
+        self.data.bounds.intersect(&object_space_ray)
+            .and_then(|_| { self.data.intersect(&object_space_ray, t_min, t_max) })
+
+        // TODO: Have to re-calculate intersection point and tdist.
+    }
 }

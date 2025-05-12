@@ -10,10 +10,10 @@ struct ViewPlane {
 }
 
 impl ViewPlane {
-    pub fn new(camera_origin: Point3<f32>, camera_direction: Vector3<f32>, camera_up: Vector3<f32>, field_of_view: f32, aspect_ratio: f32) -> Self {
+    pub fn new(camera_origin: Point3<f32>, camera_direction: Vector3<f32>, camera_up: Vector3<f32>, yfov: f32, aspect_ratio: f32) -> Self {
         const PLANE_DISTANCE:f32 = 10.0;
-        let plane_width = 2.0 * PLANE_DISTANCE * (field_of_view / 2.0).tan();
-        let plane_height = plane_width * aspect_ratio;
+        let plane_height = 2.0 * PLANE_DISTANCE * (yfov / 2.0).tan();
+        let plane_width = plane_height * aspect_ratio;
 
         let n = (camera_direction * -1.0).normalize();
 
@@ -48,8 +48,8 @@ pub struct PerspectiveCamera {
 }
 
 impl PerspectiveCamera {
-    pub fn new(origin: Point3<f32>, direction: Vector3<f32>, up: Vector3<f32>, aspect_ratio: f32, field_of_view: f32) -> Self {
-        Self { origin, direction, up, aspect_ratio, view_plane: ViewPlane::new(origin, direction, up, field_of_view, aspect_ratio) }
+    pub fn new(origin: Point3<f32>, direction: Vector3<f32>, up: Vector3<f32>, aspect_ratio: f32, yfov: f32) -> Self {
+        Self { origin, direction, up, aspect_ratio, view_plane: ViewPlane::new(origin, direction, up, yfov, aspect_ratio) }
     }
 }
 

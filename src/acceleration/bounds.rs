@@ -1,4 +1,5 @@
 use nalgebra::Point3;
+use crate::core::Ray;
 
 #[derive(Copy, Clone, Debug)]
 pub struct AABB {
@@ -21,6 +22,28 @@ impl AABB {
         self.max.x = self.max.x.max(p.x);
         self.max.y = self.max.y.max(p.y);
         self.max.z = self.max.z.max(p.z);
+    }
+
+    pub fn intersect(&self, ray: &Ray) -> Option<f32> {
+        let tx1 = (self.min.x - ray.origin().x) / ray.direction().x; //*r.n_inv.x
+        let tx2 = (self.max.x - ray.origin().x) / ray.direction().x; //*r.n_inv.x
+        
+        let mut tmin = tx1.min(tx2);
+        let mut tmax = tx1.max(tx2);
+        
+        let ty1 = (self.min.y - ray.origin().y) / ray.direction().y; //*r.n_inv.y;
+        let ty2 = (self.max.y - ray.origin().y) / ray.direction().y; //*r.n_inv.y;
+        
+        tmin = tmin.max(ty1.min(ty2));
+        tmax = tmax.min(ty1.max(ty2));
+        
+        let tz1 = (self.min.z - ray.origin().z) / ray.direction().z;
+        let tz2 = (self.max.z - ray.origin().z) / ray.direction().z;
+        
+        tmin = tmin.max(tz1.min(tz2));
+        tmax = tmax.min(tz1.max(tz2));
+        
+        if tmax >= tmin { Some(tmin) } else { None }
     }
 }
 
