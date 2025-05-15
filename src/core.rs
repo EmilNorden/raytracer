@@ -1,5 +1,6 @@
 use nalgebra::{Matrix4, Point3, Vector3};
 
+#[derive(Debug, Clone)]
 pub struct Ray {
     origin: Point3<f32>,
     direction: Vector3<f32>,

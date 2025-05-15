@@ -1,3 +1,4 @@
+
 use std::time::Instant;
 use crate::content::scene_loader::SceneLoader;
 use image::ColorType::Rgb32F;
@@ -21,7 +22,6 @@ mod integrator;
 mod frame;
 
 fn main() {
-    let mut image = image::RgbImage::new(1024, 512);
 
     let camera = PerspectiveCamera::new(
         Point3::origin(),
@@ -32,11 +32,13 @@ fn main() {
     );
     // /Users/emilnorden/models/apple
     //let mut meshes = AssimpLoader::load_scene("/Users/emilnorden/models/apple/apple.obj").unwrap();
-    let scene = crate::content::gltf::loader::GltfLoader::load_scene("/Users/emilnorden/models/gltf/apples4.gltf").unwrap();
+    //let scene = crate::content::gltf::loader::GltfLoader::load_scene("/Users/emilnorden/models/gltf/lionhead/head.gltf").unwrap();
+    let scene = crate::content::gltf::loader::GltfLoader::load_scene("/Users/emilnorden/models/gltf/volvos90/volvos90.gltf").unwrap();
 
     let height = 512;
     let width = (height as f32 * 1.7777777f32) as i32;
-
+    let mut image = image::RgbImage::new(width as u32, height as u32);
+    println!("Rendering start");
     let start = Instant::now();
     let foo = (0..height).into_par_iter().map(|y| {
         let mut pixels = vec![Vector3::new(0.0, 0.0, 0.0); width as usize];
@@ -46,9 +48,9 @@ fn main() {
 
             let ray = scene.camera.generate_ray(1.0-u, 1.0-v);
 
-            let mut result = Vector3::new(0.0, 0.0, 0.0);
+            let mut result = Vector3::new(1.0, 1.0, 1.0);
             if let Some(hit) = scene.intersect(&ray) {
-                result = Vector3::new(1.0, 1.0, 1.0);
+                result = hit.material.sample_color_bilinear(hit.intersection.tex_coord.x, hit.intersection.tex_coord.y);
             }
 
             pixels[x as usize] = result;

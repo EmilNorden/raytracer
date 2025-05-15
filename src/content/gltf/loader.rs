@@ -7,8 +7,14 @@ use crate::content::scene_loader::{SceneError, SceneLoader};
 use crate::scene::scene::Scene;
 use std::sync::Arc;
 use gltf::buffer::Data;
+use gltf::Image;
+use gltf::image::Source;
+use gltf::mesh::Mode;
+use crate::content::content_cache::ContentCache;
+use crate::content::gltf::material::create_material;
 use crate::content::mesh::{Mesh, MeshData};
 use crate::content::triangle::{Triangle, Vertex};
+use crate::scene::material::Material;
 
 pub struct GltfLoader{}
 
@@ -47,8 +53,9 @@ impl GltfLoader {
         Ok(PerspectiveCamera::new(origin, forward, up, perspective.aspect_ratio().unwrap(), perspective.yfov()))
     }
 
-    fn create_meshes(scene: &gltf::scene::Scene, buffers: &Vec<Data>, total_mesh_count: usize) -> anyhow::Result<Vec<Mesh>> {
-        let mut mesh_data_map :Vec<Option<Arc<MeshData>>> = vec![None; total_mesh_count];
+    fn create_meshes(scene: &gltf::scene::Scene, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Mesh>> {
+        let mut byte_size = 0;
+        let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
         let mesh_nodes = scene.nodes()
             .filter(|n| n.mesh().is_some());
 
@@ -61,7 +68,7 @@ impl GltfLoader {
             let mesh_data = if mesh_data_map[mesh.index()].is_some() {
                 mesh_data_map[mesh.index()].clone().unwrap()
             } else {
-                let data = Self::create_mesh_data(&buffers, &mesh)?;
+                let data = Self::create_mesh_data(&buffers, &mesh, total_material_count, folder)?;
                 mesh_data_map[mesh.index()] = Some(data.clone());
                 data
             };
@@ -69,16 +76,30 @@ impl GltfLoader {
             let inverse_transform = Matrix4::from(mesh_node.transform().matrix()).try_inverse()
                 .ok_or( SceneError::UnsupportedFormat("Could not invert mesh transform".to_string()))?;
 
-            meshes.push(Mesh::new(mesh_data, inverse_transform));
+            for data in mesh_data {
+                meshes.push(Mesh::new(data, inverse_transform));
+            }
         }
+
+        println!("Total mesh data size: {} bytes", byte_size);
 
         Ok(meshes)
     }
 
-    fn create_mesh_data(buffers: &&Vec<Data>, mesh: &gltf::mesh::Mesh) -> anyhow::Result<Arc<MeshData>> {
-        let mut triangles = Vec::new();
+    fn create_mesh_data(buffers: &Vec<Data>, mesh: &gltf::mesh::Mesh, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Arc<MeshData>>> {
+        let mut material_map : Vec<Option<Arc<Material>>> = vec![None; total_material_count];
+        //let mut texture_cache = ContentCache::new();
+
+        let mut meshes = Vec::new();
 
         for primitive in mesh.primitives() {
+            let mut triangles = Vec::new();
+            if primitive.mode() != Mode::Triangles {
+                return Err(SceneError::UnsupportedFormat("Only triangles are supported".to_string()).into());
+            }
+
+            let material = create_material(&primitive.material(), folder)?;
+
             let reader = primitive.reader(|buffer| {
                 Some(&buffers[buffer.index()].0)
             });
@@ -99,7 +120,8 @@ impl GltfLoader {
                 tex_coords.into_f32()
                     .map(|t| Vector2::new(t[0], t[1]))
                     .collect::<Vec<_>>()
-            }).ok_or_else(|| SceneError::UnsupportedFormat("No texture coordinates found in mesh".to_string()))?;
+            })
+                .unwrap_or_else(|| vec![Vector2::new(0.0, 0.0); positions.len()]);
 
             let indices = reader.read_indices().map(|indices| {
                 indices.into_u32().collect::<Vec<_>>()
@@ -143,20 +165,25 @@ impl GltfLoader {
 
                 triangles.push(Triangle::new([vertex0, vertex1, vertex2], 0));
             }
+
+            meshes.push(Arc::new(MeshData::new(triangles, material)));
         }
 
-        Ok(Arc::new(MeshData::new(triangles)))
+        Ok(meshes)
     }
 }
 impl SceneLoader for GltfLoader {
     fn load_scene<P: AsRef<Path>>(path: P) -> anyhow::Result<Scene> {
+        let path = path.as_ref();
+        let parent_folder = path.parent().unwrap();
+
         let (document, buffers , images) = gltf::import(path)?;
 
         if let Some(scene) = document.default_scene() {
 
             let camera = Self::create_camera(&scene)?;
 
-            let meshes = Self::create_meshes(&scene, &buffers, document.meshes().len())?;
+            let meshes = Self::create_meshes(&scene, &buffers, document.meshes().len(), document.materials().len(), parent_folder)?;
 
             Ok(Scene::new(camera, meshes))
         }

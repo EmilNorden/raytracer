@@ -2,7 +2,7 @@ use nalgebra::Matrix4;
 use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::Mesh;
 use crate::core::Ray;
-use crate::scene::{Intersectable, Intersection};
+use crate::scene::{Intersectable, Shadeable, Intersection, ShadingContext};
 
 pub struct SceneNode {
     pub transform: Matrix4<f32>,
@@ -22,7 +22,7 @@ impl Scene {
         }
     }
 
-    pub fn intersect(&self, ray: &Ray) -> Option<Intersection> {
+    pub fn intersect(&self, ray: &Ray) -> Option<ShadingContext> {
         let mut best_dist = f32::MAX;
         let mut best_hit = None;
         for object in &self.meshes {
@@ -30,7 +30,11 @@ impl Scene {
             if let Some(hit) = object.intersect(ray, 0.0, f32::MAX) {
                 if hit.dist < best_dist {
                     best_dist = hit.dist;
-                    best_hit = Some(hit);
+                    best_hit = Some(ShadingContext {
+                        ray: ray.clone(),
+                        intersection: hit,
+                        material: object.material()
+                    });
                 }
             }
         }

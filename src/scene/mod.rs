@@ -1,5 +1,5 @@
 
-use nalgebra::{Matrix, Matrix4, Point3, Vector3};
+use nalgebra::{Matrix, Matrix4, Point3, Vector2, Vector3};
 use crate::acceleration::bounds::AABB;
 use crate::core::Ray;
 use crate::scene::material::Material;
@@ -7,11 +7,17 @@ use crate::scene::material::Material;
 pub mod material;
 pub mod scene;
 mod transform;
+pub mod texture;
 
 pub struct Intersection {
     pub dist: f32,
-    pub u: f32,
-    pub v: f32,
+    pub tex_coord: Vector2<f32>,
+}
+
+pub struct ShadingContext<'a> {
+    pub ray: Ray,
+    pub intersection: Intersection,
+    pub material: &'a Material,
 }
 
 pub trait Intersectable {
@@ -20,7 +26,7 @@ pub trait Intersectable {
 }
 
 pub trait Shadeable {
-    fn material(&self) -> Material;
+    fn material(&self) -> &Material;
 }
 
 pub struct SceneObject {
@@ -68,12 +74,12 @@ impl Intersectable for Sphere {
             }
         }
 
-        Some(Intersection { dist: root, u: 0.0, v: 0.0 })
+        Some(Intersection { dist: root, tex_coord: Vector2::new(0.0, 0.0) })
     }
 }
 
 impl Shadeable for Sphere {
-    fn material(&self) -> Material {
-        self.material
+    fn material(&self) -> &Material {
+        &self.material
     }
 }

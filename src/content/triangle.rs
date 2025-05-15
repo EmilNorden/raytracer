@@ -9,9 +9,17 @@ pub struct Vertex {
     pub normal: Vector3<f32>, // TODO: Hmmm
     pub uv: Vector2<f32>,
 }
+
+#[derive(Clone)]
 pub struct Triangle {
     vertices: [Vertex; 3],
     material_id: usize,
+}
+
+pub struct TriangleIntersection {
+    pub triangle: Triangle,
+    pub dist: f32,
+    pub barycentric: Vector2<f32>,
 }
 
 impl Triangle {
@@ -23,7 +31,7 @@ impl Triangle {
     pub fn v1(&self) -> Vertex { self.vertices[1] }
     pub fn v2(&self) -> Vertex { self.vertices[2] }
 
-    pub fn intersect(&self, ray: &Ray) -> Option<Intersection> {
+    pub fn intersect(&self, ray: &Ray) -> Option<TriangleIntersection> {
         let epsilon = 1e-8;
 
         let edge1 = self.vertices[1].position.sub(self.vertices[0].position);
@@ -51,7 +59,7 @@ impl Triangle {
         // At this stage we can compute t to find out where the intersection point is on the line.
         let t = f * edge2.dot(&q);
         if t > epsilon {
-            Some(Intersection { dist: t, u, v }) // intersection at t along the ray with barycentric coords u,v
+            Some(TriangleIntersection { triangle: self.clone(), dist: t, barycentric: Vector2::new(u, v)}) // intersection at t along the ray with barycentric coords u,v
         } else {
             None // Line intersection but not a ray intersection.
         }
