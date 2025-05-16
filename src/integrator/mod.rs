@@ -1,2 +1,2 @@
-mod integrator;
-mod whitted;
+pub mod integrator;
+pub mod whitted;

@@ -10,3 +10,4 @@ anyhow = "1.0.97"
 rand = "0.9.1"
 rayon = "1.10.0"
 gltf = { version = "1.4.1", features = ["import"] }
+clap = { version = "4.5.38", features = ["derive"] }

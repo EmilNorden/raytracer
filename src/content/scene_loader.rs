@@ -1,4 +1,5 @@
 use std::path::Path;
+use crate::RenderOptions;
 use crate::scene::scene::Scene;
 
 #[derive(Debug)]
@@ -25,5 +26,5 @@ impl std::fmt::Display for SceneError {
 }
 
 pub trait SceneLoader {
-    fn load_scene<P: AsRef<Path>>(path: P) -> anyhow::Result<Scene>;
+    fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions) -> anyhow::Result<Scene>;
 }

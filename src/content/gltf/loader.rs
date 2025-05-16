@@ -7,13 +7,11 @@ use crate::content::scene_loader::{SceneError, SceneLoader};
 use crate::scene::scene::Scene;
 use std::sync::Arc;
 use gltf::buffer::Data;
-use gltf::Image;
-use gltf::image::Source;
 use gltf::mesh::Mode;
-use crate::content::content_cache::ContentCache;
 use crate::content::gltf::material::create_material;
 use crate::content::mesh::{Mesh, MeshData};
 use crate::content::triangle::{Triangle, Vertex};
+use crate::options::RenderOptions;
 use crate::scene::material::Material;
 
 pub struct GltfLoader{}
@@ -32,7 +30,7 @@ impl GltfLoader {
         Point3::new(transform[(0, 3)], transform[(1, 3)], transform[(2, 3)])
     }
 
-    fn create_camera(scene: &gltf::scene::Scene) -> anyhow::Result<PerspectiveCamera> {
+    fn create_camera(scene: &gltf::scene::Scene, options: &RenderOptions) -> anyhow::Result<PerspectiveCamera> {
         let camera_node = scene.nodes()
             .find(|n| n.camera().is_some())
             .ok_or_else(|| SceneError::NoCameras)?;
@@ -49,8 +47,10 @@ impl GltfLoader {
         let camera_transform = Matrix4::from(camera_node.transform().matrix());
         let (_, up, forward) = Self::extract_directions(&camera_transform);
         let origin = Self::extract_translation(&camera_transform);
+        
+        let aspect_ratio = options.width as f32 / options.height as f32;
 
-        Ok(PerspectiveCamera::new(origin, forward, up, perspective.aspect_ratio().unwrap(), perspective.yfov()))
+        Ok(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov()))
     }
 
     fn create_meshes(scene: &gltf::scene::Scene, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Mesh>> {
@@ -173,7 +173,7 @@ impl GltfLoader {
     }
 }
 impl SceneLoader for GltfLoader {
-    fn load_scene<P: AsRef<Path>>(path: P) -> anyhow::Result<Scene> {
+    fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions) -> anyhow::Result<Scene> {
         let path = path.as_ref();
         let parent_folder = path.parent().unwrap();
 
@@ -181,7 +181,7 @@ impl SceneLoader for GltfLoader {
 
         if let Some(scene) = document.default_scene() {
 
-            let camera = Self::create_camera(&scene)?;
+            let camera = Self::create_camera(&scene, options)?;
 
             let meshes = Self::create_meshes(&scene, &buffers, document.meshes().len(), document.materials().len(), parent_folder)?;
 
