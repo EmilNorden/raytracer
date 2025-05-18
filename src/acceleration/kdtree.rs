@@ -51,8 +51,9 @@ pub struct KDTree {
 
 impl KDTree {
     pub fn new(items: Vec<Triangle>) -> Self {
-       let bounds = AABB::from_points(items.iter()
+       let mut bounds = AABB::from_points(items.iter()
            .flat_map(|x| [x.v0().position, x.v1().position, x.v2().position]));
+        bounds.ensure_minimum_dimensions(0.001);
         Self {
             root: TreeNode::build_node(items, Axis::X),
             bounds,

@@ -16,14 +16,14 @@ impl AABB {
     pub fn new(min: Point3<f32>, max: Point3<f32>) -> Self {
         Self { min, max }
     }
-    
+
     pub fn from_points<I: IntoIterator<Item = Point3<f32>>>(points: I) -> Self {
         let mut bounds = AABB::new(Point3::new(f32::MAX, f32::MAX, f32::MAX), Point3::new(f32::MIN, f32::MIN, f32::MIN));
-        
+
         for p in points {
             bounds.expand(p);
         }
-        
+
         bounds
     }
 
@@ -37,6 +37,23 @@ impl AABB {
         self.max.x = self.max.x.max(p.x);
         self.max.y = self.max.y.max(p.y);
         self.max.z = self.max.z.max(p.z);
+    }
+
+    pub fn ensure_minimum_dimensions(&mut self, min_length: f32) {
+        let size = self.max - self.min;
+        let half_length = min_length / 2.0;
+        if size.x < min_length {
+            self.max.x = self.max.x + half_length;
+            self.min.x = self.min.x - half_length;
+        }
+        if size.y < min_length {
+            self.max.y = self.max.y + half_length;
+            self.min.y = self.min.y - half_length;
+        }
+        if size.z < min_length {
+            self.max.z = self.max.z + half_length;
+            self.min.z = self.min.z - half_length;
+        }
     }
 
     pub fn intersect(&self, ray: &Ray) -> Option<AABBIntersection> {
