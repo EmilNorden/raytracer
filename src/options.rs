@@ -6,8 +6,8 @@ pub struct RenderOptions {
     pub scene_file: String,
     #[arg(long, short, default_value = "output.png")]
     pub output_file: String,
-    #[arg(long, short, default_value = "800")]
+    #[arg(long, default_value = "800")]
     pub width: u32,
-    #[arg(long, short, default_value = "600")]
+    #[arg(long, default_value = "600")]
     pub height: u32,
 }

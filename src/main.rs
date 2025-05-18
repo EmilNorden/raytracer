@@ -19,7 +19,7 @@ mod content;
 mod integrator;
 mod frame;
 mod options;
-
+mod static_stack;
 
 fn main() {
     let options = RenderOptions::parse();

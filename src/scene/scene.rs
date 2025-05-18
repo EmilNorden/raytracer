@@ -1,4 +1,4 @@
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector3};
 use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::Mesh;
 use crate::core::Ray;
@@ -12,13 +12,21 @@ pub struct SceneNode {
 pub struct Scene {
     pub camera: PerspectiveCamera, // TODO: Replace with camera trait
     meshes: Vec<Mesh>,
+    emissive_meshes: Vec<Mesh>,
 }
 
 impl Scene {
     pub fn new(camera: PerspectiveCamera, meshes: Vec<Mesh>) -> Self {
+        let mut emissive_meshes = Vec::new();
+        for mesh in &meshes {
+            if mesh.material().emissive_factor() != Vector3::zeros() {
+                emissive_meshes.push(mesh.clone());
+            }
+        }
         Self {
             camera,
             meshes,
+            emissive_meshes,
         }
     }
 
@@ -33,13 +41,18 @@ impl Scene {
                     best_hit = Some(ShadingContext {
                         ray: ray.clone(),
                         intersection: hit,
-                        material: object.material()
+                        material: object.material(),
+                        mesh_index: object.mesh_index()
                     });
                 }
             }
         }
 
         best_hit
+    }
+
+    pub fn emissive_meshes(&self) -> &Vec<Mesh> {
+        &self.emissive_meshes
     }
 }
 

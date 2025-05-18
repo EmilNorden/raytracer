@@ -17,10 +17,6 @@ impl Frame {
         }
     }
     
-    pub fn get_pixels(&self) -> &[Vector3<f32>] {
-        &self.pixels
-    }
-    
     pub fn width(&self) -> u32 {
         self.width
     }

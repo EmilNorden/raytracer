@@ -7,9 +7,24 @@ pub struct AABB {
     max: Point3<f32>,
 }
 
+pub struct AABBIntersection {
+    pub tmin: f32,
+    pub tmax: f32,
+}
+
 impl AABB {
     pub fn new(min: Point3<f32>, max: Point3<f32>) -> Self {
         Self { min, max }
+    }
+    
+    pub fn from_points<I: IntoIterator<Item = Point3<f32>>>(points: I) -> Self {
+        let mut bounds = AABB::new(Point3::new(f32::MAX, f32::MAX, f32::MAX), Point3::new(f32::MIN, f32::MIN, f32::MIN));
+        
+        for p in points {
+            bounds.expand(p);
+        }
+        
+        bounds
     }
 
     pub fn min(&self) -> Point3<f32> { self.min }
@@ -24,7 +39,7 @@ impl AABB {
         self.max.z = self.max.z.max(p.z);
     }
 
-    pub fn intersect(&self, ray: &Ray) -> Option<f32> {
+    pub fn intersect(&self, ray: &Ray) -> Option<AABBIntersection> {
         let tx1 = (self.min.x - ray.origin().x) / ray.direction().x; //*r.n_inv.x
         let tx2 = (self.max.x - ray.origin().x) / ray.direction().x; //*r.n_inv.x
         
@@ -43,7 +58,7 @@ impl AABB {
         tmin = tmin.max(tz1.min(tz2));
         tmax = tmax.min(tz1.max(tz2));
         
-        if tmax >= tmin { Some(tmin) } else { None }
+        if tmax >= tmin { Some(AABBIntersection { tmin, tmax }) } else { None }
     }
 }
 

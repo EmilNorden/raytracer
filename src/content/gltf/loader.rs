@@ -8,6 +8,8 @@ use crate::scene::scene::Scene;
 use std::sync::Arc;
 use gltf::buffer::Data;
 use gltf::mesh::Mode;
+use gltf::Node;
+use gltf::scene::iter;
 use crate::content::gltf::material::create_material;
 use crate::content::mesh::{Mesh, MeshData};
 use crate::content::triangle::{Triangle, Vertex};
@@ -47,41 +49,75 @@ impl GltfLoader {
         let camera_transform = Matrix4::from(camera_node.transform().matrix());
         let (_, up, forward) = Self::extract_directions(&camera_transform);
         let origin = Self::extract_translation(&camera_transform);
-        
+
         let aspect_ratio = options.width as f32 / options.height as f32;
 
         Ok(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov()))
     }
+    
+    fn create_meshes_in_children(parent: &Node, current_transform: Matrix4<f32>, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Mesh>> {
+        let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
+        
+        let child_transform = current_transform * Matrix4::from(parent.transform().matrix());
+
+        let mut meshes = Vec::new();
+
+        for node in parent.children() {
+            if let Some(mesh) = node.mesh() {
+                let mesh_data = if mesh_data_map[mesh.index()].is_some() {
+                    mesh_data_map[mesh.index()].clone().unwrap()
+                } else {
+                    let data = Self::create_mesh_data(&buffers, &mesh, total_material_count, folder)?;
+                    mesh_data_map[mesh.index()] = Some(data.clone());
+                    data
+                };
+
+                let transform = child_transform * Matrix4::from(node.transform().matrix());
+                let inverse_transform = transform.try_inverse()
+                    .ok_or( SceneError::UnsupportedFormat("Could not invert mesh transform".to_string()))?;
+
+                for data in mesh_data {
+                    meshes.push(Mesh::new(mesh.index(), data, Self::extract_translation(&transform), inverse_transform));
+                }
+            }
+            
+            meshes.append(&mut Self::create_meshes_in_children(&node, child_transform, buffers, total_mesh_count, total_material_count, folder)?);
+        }
+        
+        
+
+        Ok(meshes)
+    }
 
     fn create_meshes(scene: &gltf::scene::Scene, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Mesh>> {
-        let mut byte_size = 0;
         let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
         let mesh_nodes = scene.nodes()
             .filter(|n| n.mesh().is_some());
 
         let mut meshes = Vec::new();
+        
+        for node in scene.nodes() {
+            if let Some(mesh) = node.mesh() {
+                let mesh_data = if mesh_data_map[mesh.index()].is_some() {
+                    mesh_data_map[mesh.index()].clone().unwrap()
+                } else {
+                    let data = Self::create_mesh_data(&buffers, &mesh, total_material_count, folder)?;
+                    mesh_data_map[mesh.index()] = Some(data.clone());
+                    data
+                };
 
-        for mesh_node in mesh_nodes {
+                let transform = Matrix4::from(node.transform().matrix());
+                let inverse_transform = transform.try_inverse()
+                    .ok_or( SceneError::UnsupportedFormat("Could not invert mesh transform".to_string()))?;
 
-            let mesh = mesh_node.mesh().unwrap();
-
-            let mesh_data = if mesh_data_map[mesh.index()].is_some() {
-                mesh_data_map[mesh.index()].clone().unwrap()
-            } else {
-                let data = Self::create_mesh_data(&buffers, &mesh, total_material_count, folder)?;
-                mesh_data_map[mesh.index()] = Some(data.clone());
-                data
-            };
-
-            let inverse_transform = Matrix4::from(mesh_node.transform().matrix()).try_inverse()
-                .ok_or( SceneError::UnsupportedFormat("Could not invert mesh transform".to_string()))?;
-
-            for data in mesh_data {
-                meshes.push(Mesh::new(data, inverse_transform));
+                for data in mesh_data {
+                    meshes.push(Mesh::new(mesh.index(), data, Self::extract_translation(&transform), inverse_transform));
+                }
             }
+            
+            meshes.append(&mut Self::create_meshes_in_children(&node, Matrix4::identity(), buffers, total_mesh_count, total_material_count, folder)?);
         }
-
-        println!("Total mesh data size: {} bytes", byte_size);
+        
 
         Ok(meshes)
     }

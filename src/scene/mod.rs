@@ -12,12 +12,15 @@ pub mod texture;
 pub struct Intersection {
     pub dist: f32,
     pub tex_coord: Vector2<f32>,
+    pub normal: Vector3<f32>,
+
 }
 
 pub struct ShadingContext<'a> {
     pub ray: Ray,
     pub intersection: Intersection,
     pub material: &'a Material,
+    pub mesh_index: usize,
 }
 
 pub trait Intersectable {
@@ -74,7 +77,10 @@ impl Intersectable for Sphere {
             }
         }
 
-        Some(Intersection { dist: root, tex_coord: Vector2::new(0.0, 0.0) })
+        Some(Intersection {
+            dist: root,
+            tex_coord: Vector2::new(0.0, 0.0),
+            normal: (ray.origin() + ray.direction() * root - self.position).normalize()})
     }
 }
 
