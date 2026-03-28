@@ -17,8 +17,8 @@ impl Texture {
     }
 
     pub fn sample_color(&self, u: f32, v: f32) -> Vector3<f32> {
-        assert!(u >= 0.0 && u <= 1.0);
-        assert!(v >= 0.0 && v <= 1.0);
+        assert!(u >= 0.0 && u <= 1.0, "u is {}", u);
+        assert!(v >= 0.0 && v <= 1.0, "v is {}", v);
         let x = (u * self.width as f32) as usize;
         let y = (v * self.height as f32) as usize;
 

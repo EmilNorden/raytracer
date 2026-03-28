@@ -32,6 +32,6 @@ pub fn create_material(material: &gltf::Material, folder: &Path) -> anyhow::Resu
     let base_color = material.pbr_metallic_roughness().base_color_factor();
     let roughness = material.pbr_metallic_roughness().roughness_factor();
     let emissive = Vector3::new(material.emissive_factor()[0], material.emissive_factor()[1], material.emissive_factor()[2]);
-
+    println!("emission: {}", emissive);
     Ok(Material::new(Vector3::new(base_color[0], base_color[1], base_color[2]), albedo_texture, emissive_texture, emissive, roughness))
 }

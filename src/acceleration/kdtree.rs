@@ -1,4 +1,4 @@
-use nalgebra::Point3;
+use nalgebra::{Point3, Vector3};
 use crate::acceleration::bounds::AABB;
 use crate::content::triangle::{Triangle, TriangleIntersection};
 use crate::core::Ray;
@@ -53,6 +53,8 @@ impl KDTree {
     pub fn new(items: Vec<Triangle>) -> Self {
        let mut bounds = AABB::from_points(items.iter()
            .flat_map(|x| [x.v0().position, x.v1().position, x.v2().position]));
+
+        bounds.inflate(0.001);
         bounds.ensure_minimum_dimensions(0.001);
         Self {
             root: TreeNode::build_node(items, Axis::X),
@@ -62,6 +64,16 @@ impl KDTree {
 
     pub fn bounds(&self) -> AABB {
         self.bounds
+    }
+    
+    pub fn triangle_count_from_node(&self, node: &TreeNode) -> u32 {
+        node.items.len() as u32 +   
+            node.left.as_ref().map_or(0, |x| self.triangle_count_from_node(x.as_ref())) + 
+            node.right.as_ref().map_or(0, |x| self.triangle_count_from_node(x.as_ref()))
+    }
+    
+    pub fn triangle_count(&self) -> u32 {
+        self.triangle_count_from_node(&self.root)
     }
 
     pub fn intersects(&self, ray: &Ray) -> Option<TriangleIntersection> {
@@ -73,6 +85,10 @@ impl KDTree {
             return None;
         };
 
+        if global_tmax.is_nan() || global_tmin.is_nan() || global_tmax.is_infinite() || global_tmin.is_infinite() {
+            println!("Oh no something is wrong");
+        }
+
         let mut nodes = StaticStack::<NodeSearchData, 100>::new_with_default(
             NodeSearchData::new(&self.root, global_tmin, global_tmax));
 
@@ -82,6 +98,9 @@ impl KDTree {
             let tmin = current.tmin;
             let tmax = current.tmax;
 
+            if tmin.is_nan() || tmax.is_nan() || tmin.is_infinite() || tmax.is_infinite() {
+                println!("Oh no something is wrong");
+            }
 
             if node.is_leaf() {
                 if let Some(hit) = Self::intersects_mesh(self, ray, node, tmax) {
@@ -142,7 +161,7 @@ impl KDTree {
         } else if range_start >= splitting_value && range_end < splitting_value {
             RangePlaneComparison::AboveToBelow
         } else {
-            panic!("This should never happen!");
+            panic!("This should never happen. range_start {} range_end {} splitting_value {}!", range_start, range_end, splitting_value);
         }
     }
 }

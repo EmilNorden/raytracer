@@ -8,6 +8,7 @@ pub mod material;
 pub mod scene;
 mod transform;
 pub mod texture;
+mod coordinate_system;
 
 pub struct Intersection {
     pub dist: f32,

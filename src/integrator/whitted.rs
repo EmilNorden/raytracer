@@ -20,7 +20,7 @@ impl WhittedIntegrator {
     }
 }
 impl Integrator for WhittedIntegrator {
-    fn integrate(&self, scene: &Scene, frame: &mut Frame) {
+    fn integrate(&self, scene: &Scene, frame: &mut Frame, _: u32) {
         let width = frame.width() as usize;
         let height = frame.height() as usize;
         println!("Rendering start");

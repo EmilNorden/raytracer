@@ -1,4 +1,4 @@
-use nalgebra::Point3;
+use nalgebra::{Point3, Vector3};
 use crate::core::Ray;
 
 #[derive(Copy, Clone, Debug)]
@@ -37,6 +37,11 @@ impl AABB {
         self.max.x = self.max.x.max(p.x);
         self.max.y = self.max.y.max(p.y);
         self.max.z = self.max.z.max(p.z);
+    }
+
+    pub fn inflate(&mut self, offset: f32) {
+        self.max = self.max + Vector3::new(offset, offset, offset);
+        self.min = self.min - Vector3::new(offset, offset, offset);
     }
 
     pub fn ensure_minimum_dimensions(&mut self, min_length: f32) {

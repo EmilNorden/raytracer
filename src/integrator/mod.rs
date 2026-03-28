@@ -1,3 +1,4 @@
 pub mod integrator;
 pub mod whitted;
-mod pathtracing;
+pub mod pathtracing;
+pub mod debug;

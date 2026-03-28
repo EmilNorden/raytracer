@@ -54,10 +54,10 @@ impl GltfLoader {
 
         Ok(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov()))
     }
-    
+
     fn create_meshes_in_children(parent: &Node, current_transform: Matrix4<f32>, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Mesh>> {
         let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
-        
+
         let child_transform = current_transform * Matrix4::from(parent.transform().matrix());
 
         let mut meshes = Vec::new();
@@ -73,29 +73,25 @@ impl GltfLoader {
                 };
 
                 let transform = child_transform * Matrix4::from(node.transform().matrix());
-                let inverse_transform = transform.try_inverse()
-                    .ok_or( SceneError::UnsupportedFormat("Could not invert mesh transform".to_string()))?;
 
                 for data in mesh_data {
-                    meshes.push(Mesh::new(mesh.index(), data, Self::extract_translation(&transform), inverse_transform));
+                    meshes.push(Mesh::new(mesh.index(), data, Self::extract_translation(&transform), transform));
                 }
             }
-            
+
             meshes.append(&mut Self::create_meshes_in_children(&node, child_transform, buffers, total_mesh_count, total_material_count, folder)?);
         }
-        
-        
+
+
 
         Ok(meshes)
     }
 
     fn create_meshes(scene: &gltf::scene::Scene, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Mesh>> {
         let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
-        let mesh_nodes = scene.nodes()
-            .filter(|n| n.mesh().is_some());
 
         let mut meshes = Vec::new();
-        
+
         for node in scene.nodes() {
             if let Some(mesh) = node.mesh() {
                 let mesh_data = if mesh_data_map[mesh.index()].is_some() {
@@ -107,26 +103,24 @@ impl GltfLoader {
                 };
 
                 let transform = Matrix4::from(node.transform().matrix());
-                let inverse_transform = transform.try_inverse()
-                    .ok_or( SceneError::UnsupportedFormat("Could not invert mesh transform".to_string()))?;
 
                 for data in mesh_data {
-                    meshes.push(Mesh::new(mesh.index(), data, Self::extract_translation(&transform), inverse_transform));
+                    meshes.push(Mesh::new(mesh.index(), data, Self::extract_translation(&transform), transform));
                 }
             }
-            
+
             meshes.append(&mut Self::create_meshes_in_children(&node, Matrix4::identity(), buffers, total_mesh_count, total_material_count, folder)?);
         }
-        
+
 
         Ok(meshes)
     }
 
     fn create_mesh_data(buffers: &Vec<Data>, mesh: &gltf::mesh::Mesh, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Arc<MeshData>>> {
         let mut material_map : Vec<Option<Arc<Material>>> = vec![None; total_material_count];
-        //let mut texture_cache = ContentCache::new();
 
         let mut meshes = Vec::new();
+        println!("mesh: {:?}", mesh.name());
 
         for primitive in mesh.primitives() {
             let mut triangles = Vec::new();
@@ -199,7 +193,7 @@ impl GltfLoader {
                     uv: tex_coord2,
                 };
 
-                triangles.push(Triangle::new([vertex0, vertex1, vertex2], 0));
+                triangles.push(Triangle::new([vertex0, vertex1, vertex2]));
             }
 
             meshes.push(Arc::new(MeshData::new(triangles, material)));
@@ -213,13 +207,19 @@ impl SceneLoader for GltfLoader {
         let path = path.as_ref();
         let parent_folder = path.parent().unwrap();
 
+        println!("Loading GLTF file..");
         let (document, buffers , images) = gltf::import(path)?;
 
         if let Some(scene) = document.default_scene() {
 
+            println!("Setting up camera..");;
             let camera = Self::create_camera(&scene, options)?;
 
+            println!("Processing meshes..");
             let meshes = Self::create_meshes(&scene, &buffers, document.meshes().len(), document.materials().len(), parent_folder)?;
+
+            let triangles: usize = meshes.iter().map(|x| x.triangle_count()).sum();
+            println!("Loaded {} meshes with {} triangles", meshes.len(), triangles);
 
             Ok(Scene::new(camera, meshes))
         }

@@ -10,10 +10,19 @@ pub struct Vertex {
     pub uv: Vector2<f32>,
 }
 
+impl Vertex {
+    pub fn transform(&self, transform: &nalgebra::Matrix4<f32>) -> Vertex {
+        Vertex {
+            position: transform.transform_point(&self.position),
+            normal: transform.transform_vector(&self.normal),
+            uv: self.uv,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Triangle {
     vertices: [Vertex; 3],
-    material_id: usize,
 }
 
 pub struct TriangleIntersection {
@@ -23,8 +32,10 @@ pub struct TriangleIntersection {
 }
 
 impl Triangle {
-    pub fn new(vertices: [Vertex; 3], material_id: usize) -> Self {
-        Self { vertices, material_id }
+    pub fn new(vertices: [Vertex; 3],) -> Self {
+        Self {
+            vertices,
+        }
     }
 
     pub fn v0(&self) -> Vertex { self.vertices[0] }
@@ -34,6 +45,7 @@ impl Triangle {
     pub fn intersect(&self, ray: &Ray) -> Option<TriangleIntersection> {
         let epsilon = 1e-8;
 
+        // TODO: Performance test precomputed edges for larger scenes
         let edge1 = self.vertices[1].position.sub(self.vertices[0].position);
         let edge2 = self.vertices[2].position.sub(self.vertices[0].position);
 
@@ -63,6 +75,37 @@ impl Triangle {
         } else {
             None // Line intersection but not a ray intersection.
         }
+    }
+
+    pub fn transform(&self, transform: &nalgebra::Matrix4<f32>) -> Triangle {
+        Triangle::new([
+            self.v0().transform(transform),
+            self.v1().transform(transform),
+            self.v2().transform(transform),
+        ])
+    }
+
+    pub fn sample_uniform_point(&self, rng: &mut impl rand::Rng) -> (Point3<f32>, Vector3<f32>) {
+        let u: f32 = rng.random();
+        let v: f32 = rng.random();
+
+        // This transformation ensures uniform distribution across the triangle
+        let sqrt_u = u.sqrt();
+        let bary_u = 1.0 - sqrt_u;
+        let bary_v = v * sqrt_u;
+        let bary_w = 1.0 - bary_u - bary_v;
+
+        // Interpolate position
+        let point = self.vertices[0].position.coords * bary_u
+            + self.vertices[1].position.coords * bary_v
+            + self.vertices[2].position.coords * bary_w;
+
+        // Interpolate normal
+        let normal = self.vertices[0].normal * bary_u
+            + self.vertices[1].normal * bary_v
+            + self.vertices[2].normal * bary_w;
+
+        (<Point3<f32>>::from(point), normal)
     }
 }
 

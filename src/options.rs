@@ -10,4 +10,8 @@ pub struct RenderOptions {
     pub width: u32,
     #[arg(long, default_value = "600")]
     pub height: u32,
+    #[arg(long, short = 'x', default_value = "10")]
+    pub samples: u32,
+    #[arg(short = 'd')]
+    pub debug: bool,
 }
