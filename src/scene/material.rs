@@ -39,8 +39,8 @@ pub struct BsdfSample {
 }
 
 impl Material {
-    pub fn new(color: Vector3<f32>, texture: Option<Texture>, emissive_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32) -> Self {
-        Self { color, texture, emissive_texture, emissive, roughness, f0: Vector3::new(0.4, 0.4, 0.4), metallic: 0.0 }
+    pub fn new(color: Vector3<f32>, texture: Option<Texture>, emissive_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32, metallic: f32) -> Self {
+        Self { color, texture, emissive_texture, emissive, roughness, f0: Vector3::new(0.4, 0.4, 0.4), metallic, }
     }
 
     pub fn color(&self) -> Vector3<f32> { self.color }
@@ -96,7 +96,19 @@ impl Material {
         (dir, pdf)
     }*/
 
-    pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
+    fn lerp(a: f32, b: f32, t: f32) -> f32 {
+        a + t * (b - a)
+    }
+
+    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
+        let f0_dielectric = Vector3::new(0.04, 0.04, 0.04);
+        let f0_metal = self.color;
+
+        unimplemented!()
+        //let f0 = Self::lerp(f0_dielectric, f0_metal, self.metallic);
+    }
+
+pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
 
         let local_system = CoordinateSystem::from_normal(&normal);
         let local_dir = Self::cosine_sample_hemisphere(rng);
@@ -106,7 +118,7 @@ impl Material {
         // Cosine-weighted PDF
         let pdf = direction.dot(&normal).max(0.0) / PI;
 
-        let bsdf_value = self.color / PI;
+        let bsdf_value = albedo / PI;
 
 
         BsdfSample {

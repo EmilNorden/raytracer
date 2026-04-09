@@ -1,3 +1,4 @@
+use std::f32::consts::E;
 use std::path::Path;
 use gltf::image::Source;
 use gltf::texture;
@@ -31,7 +32,10 @@ pub fn create_material(material: &gltf::Material, folder: &Path) -> anyhow::Resu
 
     let base_color = material.pbr_metallic_roughness().base_color_factor();
     let roughness = material.pbr_metallic_roughness().roughness_factor();
-    let emissive = Vector3::new(material.emissive_factor()[0], material.emissive_factor()[1], material.emissive_factor()[2]);
+    let metallic = material.pbr_metallic_roughness().metallic_factor();
+    static EMISSIVE_SCALE: f32 = 1.0; // TODO: This is a hack to make emissive materials more visible. Should probably be exposed as a parameter.'
+    let emissive_strength = material.emissive_strength().unwrap_or(0.0) * EMISSIVE_SCALE;
+    let emissive = Vector3::new(material.emissive_factor()[0] * emissive_strength, material.emissive_factor()[1] * emissive_strength, material.emissive_factor()[2] * emissive_strength);
     println!("emission: {}", emissive);
-    Ok(Material::new(Vector3::new(base_color[0], base_color[1], base_color[2]), albedo_texture, emissive_texture, emissive, roughness))
+    Ok(Material::new(Vector3::new(base_color[0], base_color[1], base_color[2]), albedo_texture, emissive_texture, emissive, roughness, metallic))
 }

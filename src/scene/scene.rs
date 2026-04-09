@@ -81,7 +81,7 @@ impl Scene {
 
         // PDF is 1/area. For now, use a rough estimate 
         let bounds = mesh.bounds();
-        let area = (bounds.max().x - bounds.min().x) * (bounds.max().y - bounds.min().y);
+        let area = (bounds.max().x - bounds.min().x) * (bounds.max().z - bounds.min().z);
         let pdf = 1.0 / area;
 
         Some((point, normal, emissive, pdf))

@@ -4,7 +4,7 @@ use clap::Parser;
 pub struct RenderOptions {
     #[arg(long, short)]
     pub scene_file: String,
-    #[arg(long, short, default_value = "output.png")]
+    #[arg(long, short, default_value = "output/out.png")]
     pub output_file: String,
     #[arg(long, default_value = "800")]
     pub width: u32,
