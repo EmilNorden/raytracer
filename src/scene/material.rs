@@ -24,9 +24,13 @@ pub struct Material {
     A dielectric (non-metal, e.g., wood, plastic) → metallic = 0.0
     A metal (e.g., gold, copper) → metallic = 1.0
     Or something in between (blended material) → metallic = 0.5
-    In glTF, it’s part of the baseColorTexture + metallicRoughnessTexture bundle.
+    In glTF, it's part of the baseColorTexture + metallicRoughnessTexture bundle.
      */
     metallic: f32,
+
+    // Transmission/refraction properties
+    transmission_factor: f32,  // 0.0 = opaque, 1.0 = fully transparent
+    ior: f32,                  // Index of refraction (1.5 for glass, 1.33 for water)
 }
 
 pub struct BsdfSample {
@@ -34,17 +38,35 @@ pub struct BsdfSample {
     pub bsdf_value: Vector3<f32>,
     pub pdf: f32,
     pub is_reflection: bool,
+    pub is_transmission: bool,
     pub albedo: Vector3<f32>,
 }
 
 impl Material {
-    pub fn new(color: Vector3<f32>, texture: Option<Texture>, emissive_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32, metallic: f32) -> Self {
-        Self { color, texture, emissive_texture, emissive, roughness, f0: Vector3::new(0.4, 0.4, 0.4), metallic, }
+    pub fn new(color: Vector3<f32>, texture: Option<Texture>, emissive_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32) -> Self {
+        Self {
+            color,
+            texture,
+            emissive_texture,
+            emissive,
+            roughness,
+            f0: Vector3::new(0.04, 0.04, 0.04),  // Standard dielectric F0
+            metallic,
+            transmission_factor,
+            ior,
+        }
     }
 
     pub fn color(&self) -> Vector3<f32> { self.color }
     pub fn roughness(&self) -> f32 { self.roughness }
     pub fn emissive_factor(&self) -> Vector3<f32> { self.emissive }
+    pub fn transmission_factor(&self) -> f32 { self.transmission_factor }
+    pub fn ior(&self) -> f32 { self.ior }
+
+    pub fn set_transmission(&mut self, transmission_factor: f32, ior: f32) {
+        self.transmission_factor = transmission_factor.clamp(0.0, 1.0);
+        self.ior = ior.max(1.0);  // IOR must be >= 1.0
+    }
 
     pub fn sample_color(&self, u: f32, v: f32) -> Vector3<f32> {
         self.texture.as_ref().map(|t| t.sample_color(u, v)).unwrap_or(self.color)
@@ -99,16 +121,88 @@ impl Material {
         a + t * (b - a)
     }
 
+    /// Refract a ray using Snell's law
+    /// Returns (refracted_direction, eta_ratio) where eta_ratio = eta_t / eta_i
+    fn refract(incoming: Vector3<f32>, normal: Vector3<f32>, eta_ratio: f32) -> Option<Vector3<f32>> {
+        let v = (-incoming).normalize();
+        let n = normal.normalize();
+        let n_dot_v = n.dot(&v);
+
+        // If ray hits from inside, we need to flip normal and adjust eta_ratio
+        let (n_final, n_dot_v_final, eta_final) = if n_dot_v < 0.0 {
+            (-n, -n_dot_v, 1.0 / eta_ratio)
+        } else {
+            (n, n_dot_v, eta_ratio)
+        };
+
+        let discriminant = 1.0 - eta_final * eta_final * (1.0 - n_dot_v_final * n_dot_v_final);
+        if discriminant < 0.0 {
+            return None;  // Total internal reflection
+        }
+
+        let refracted = eta_final * (-v) + (eta_final * n_dot_v_final - discriminant.sqrt()) * n_final;
+        Some(refracted.normalize())
+    }
+
+    /// Compute Fresnel reflectance for dielectrics (unpolarized light)
+    /// Uses the dielectric Fresnel equation
+    fn fresnel_dielectric(cos_theta: f32, eta_ratio: f32) -> f32 {
+        let cos_theta = cos_theta.abs().clamp(0.0, 1.0);
+
+        // Snell's law to find transmission angle
+        let sin2_theta_t = eta_ratio * eta_ratio * (1.0 - cos_theta * cos_theta);
+        if sin2_theta_t > 1.0 {
+            return 1.0;  // Total internal reflection
+        }
+
+        let cos_theta_t = (1.0 - sin2_theta_t).sqrt();
+
+        // Fresnel equations for unpolarized light
+        let r_s = (cos_theta - eta_ratio * cos_theta_t) / (cos_theta + eta_ratio * cos_theta_t);
+        let r_p = (eta_ratio * cos_theta - cos_theta_t) / (eta_ratio * cos_theta + cos_theta_t);
+
+        (r_s * r_s + r_p * r_p) / 2.0
+    }
+
+
     pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
         let n = normal.normalize();
         let v = (-incoming).normalize();
         let n_dot_v = n.dot(&v).max(0.0);
+
+        // Handle transmission (refraction) for transparent materials
+        if self.transmission_factor > 0.0 && rng.random::<f32>() < self.transmission_factor {
+            let eta_ratio = self.ior;  // Assume coming from air (eta=1.0)
+
+            if let Some(refracted_dir) = Self::refract(incoming, normal, eta_ratio) {
+                let v_dot_n = v.dot(&n).abs();
+                let fresnel = Self::fresnel_dielectric(v_dot_n, eta_ratio);
+
+                // Transmission probability (1 - Fresnel reflection)
+                let transmission_prob = 1.0 - fresnel;
+                if transmission_prob > 1e-6 {
+                    // No absorption in the BSDF value for perfect transmission
+                    // (absorption would be applied by distance traveled or volume rendering)
+                    return BsdfSample {
+                        direction: refracted_dir,
+                        bsdf_value: Vector3::new(1.0, 1.0, 1.0),
+                        pdf: self.transmission_factor * transmission_prob,
+                        is_reflection: false,
+                        is_transmission: true,
+                        albedo,
+                    };
+                }
+            }
+            // If total internal reflection, fall through to reflection
+        }
+
         if n_dot_v <= 0.0 {
             return BsdfSample {
                 direction: n,
                 bsdf_value: Vector3::zeros(),
                 pdf: 0.0,
                 is_reflection: true,
+                is_transmission: false,
                 albedo,
             };
         }
@@ -126,6 +220,7 @@ impl Material {
                     bsdf_value: Vector3::zeros(),
                     pdf: 0.0,
                     is_reflection: true,
+                    is_transmission: false,
                     albedo,
                 };
             }
@@ -138,6 +233,7 @@ impl Material {
                     bsdf_value: Vector3::zeros(),
                     pdf: 0.0,
                     is_reflection: true,
+                    is_transmission: false,
                     albedo,
                 };
             }
@@ -154,6 +250,7 @@ impl Material {
                 bsdf_value,
                 pdf: specular_prob * pdf_spec,
                 is_reflection: true,
+                is_transmission: false,
                 albedo,
             };
         }
@@ -168,6 +265,7 @@ impl Material {
                 bsdf_value: Vector3::zeros(),
                 pdf: 0.0,
                 is_reflection: true,
+                is_transmission: false,
                 albedo,
             };
         }
@@ -181,6 +279,7 @@ impl Material {
             bsdf_value,
             pdf: (1.0 - specular_prob) * pdf_diffuse,
             is_reflection: true,
+            is_transmission: false,
             albedo,
         }
     }
@@ -203,6 +302,7 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
             bsdf_value,
             pdf,
             is_reflection: true,
+            is_transmission: false,
             albedo: self.color,
         }
     }
