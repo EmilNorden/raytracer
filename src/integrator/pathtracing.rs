@@ -1,4 +1,3 @@
-use std::ops::Mul;
 use nalgebra::Vector3;
 use rand::Rng;
 use rayon::iter::IntoParallelIterator;
@@ -8,7 +7,7 @@ use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
 use crate::scene::scene::Scene;
 use rayon::prelude::*;
-use crate::scene::{Shadeable, ShadingContext};
+use crate::scene::ShadingContext;
 
 pub struct PathTracingIntegrator {}
 
@@ -39,15 +38,15 @@ impl PathTracingIntegrator {
             if cos_theta > 0.0 && cos_theta_light > 0.0 {
                 // Cast shadow ray to check visibility
                 if scene.is_visible(surface_point, light_point) {
-                    // Direct lighting: multiply incoming radiance by Lambertian BRDF (albedo / π)
-                    // L_direct = Le * cos_theta_light / (distance^2 * pdf) * (albedo/π) * cos_theta
-                    direct_light = (light_emissive * cos_theta * cos_theta_light).component_mul(&albedo) / (std::f32::consts::PI * distance_sq * light_pdf);
+                    let view_dir = -ray.direction().normalize();
+                    let brdf = hit.material.brdf(&light_dir, &view_dir, &hit.intersection.normal, &albedo);
+                    direct_light = (light_emissive * (cos_theta_light / (distance_sq * light_pdf))).component_mul(&brdf) * cos_theta;
                 }
             }
         }
 
         // Indirect lighting: BSDF sampling for next bounce
-        let sample = hit.material.sample_lambertian_bsdf(ray.direction(), hit.intersection.normal, albedo, rng);
+        let sample = hit.material.sample_bsdf(ray.direction(), hit.intersection.normal, albedo, rng);
         let new_ray = Ray::new(surface_point, sample.direction);
         let indirect_light = Self::trace(&new_ray, scene, depth-1, rng);
 

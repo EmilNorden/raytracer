@@ -2,7 +2,6 @@ use std::f32::consts::PI;
 use nalgebra::Vector3;
 use rand::Rng;
 use crate::scene::coordinate_system::CoordinateSystem;
-use crate::scene::Intersection;
 use crate::scene::texture::Texture;
 
 pub struct Material {
@@ -51,7 +50,7 @@ impl Material {
         self.texture.as_ref().map(|t| t.sample_color(u, v)).unwrap_or(self.color)
     }
 
-    pub fn sample_emissive(&self, u: f32, v: f32) -> Vector3<f32> {
+    pub fn sample_emissive(&self, _u: f32, _v: f32) -> Vector3<f32> {
         self.emissive
         //self.emissive_texture.as_ref().map(|t| {t.sample_color(u, v).component_mul(&self.emissive)}).unwrap_or(self.emissive)
     }
@@ -100,12 +99,90 @@ impl Material {
         a + t * (b - a)
     }
 
-    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
-        let f0_dielectric = Vector3::new(0.04, 0.04, 0.04);
-        let f0_metal = self.color;
+    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
+        let n = normal.normalize();
+        let v = (-incoming).normalize();
+        let n_dot_v = n.dot(&v).max(0.0);
+        if n_dot_v <= 0.0 {
+            return BsdfSample {
+                direction: n,
+                bsdf_value: Vector3::zeros(),
+                pdf: 0.0,
+                is_reflection: true,
+                albedo,
+            };
+        }
 
-        unimplemented!()
-        //let f0 = Self::lerp(f0_dielectric, f0_metal, self.metallic);
+        let alpha = self.alpha();
+        let f0 = self.f0_from_albedo(&albedo);
+        let specular_prob = self.specular_sampling_probability(&f0);
+
+        if rng.random::<f32>() < specular_prob {
+            let h = self.sample_ggx_half_vector(&n, alpha, rng);
+            let v_dot_h = v.dot(&h).max(0.0);
+            if v_dot_h <= 1e-6 {
+                return BsdfSample {
+                    direction: n,
+                    bsdf_value: Vector3::zeros(),
+                    pdf: 0.0,
+                    is_reflection: true,
+                    albedo,
+                };
+            }
+
+            let l = Self::reflect(-v, h).normalize();
+            let n_dot_l = n.dot(&l).max(0.0);
+            if n_dot_l <= 0.0 {
+                return BsdfSample {
+                    direction: l,
+                    bsdf_value: Vector3::zeros(),
+                    pdf: 0.0,
+                    is_reflection: true,
+                    albedo,
+                };
+            }
+
+            let n_dot_h = n.dot(&h).max(0.0);
+            let d = Self::ggx_ndf(n_dot_h, alpha);
+            let g = Self::smith_geometry(n_dot_v, n_dot_l, alpha);
+            let f = Self::schlick_fresnel(v_dot_h, f0);
+            let bsdf_value = f * (d * g / (4.0 * n_dot_v * n_dot_l + 1e-6));
+            let pdf_spec = d * n_dot_h / (4.0 * v_dot_h + 1e-6);
+
+            return BsdfSample {
+                direction: l,
+                bsdf_value,
+                pdf: specular_prob * pdf_spec,
+                is_reflection: true,
+                albedo,
+            };
+        }
+
+        let local_system = CoordinateSystem::from_normal(&n);
+        let local_dir = Self::cosine_sample_hemisphere(rng);
+        let direction = (local_system.u * local_dir.x + local_system.v * local_dir.y + local_system.w * local_dir.z).normalize();
+        let n_dot_l = n.dot(&direction).max(0.0);
+        if n_dot_l <= 0.0 {
+            return BsdfSample {
+                direction,
+                bsdf_value: Vector3::zeros(),
+                pdf: 0.0,
+                is_reflection: true,
+                albedo,
+            };
+        }
+
+        let kd = 1.0 - self.metallic;
+        let bsdf_value = albedo * (kd / PI);
+        let pdf_diffuse = n_dot_l / PI;
+
+        BsdfSample {
+            direction,
+            bsdf_value,
+            pdf: (1.0 - specular_prob) * pdf_diffuse,
+            is_reflection: true,
+            albedo,
+        }
     }
 
 pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
@@ -143,61 +220,59 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
     }
 
     // GGX BRDF
-    pub fn brdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>) -> Vector3<f32> {
+    pub fn brdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>) -> Vector3<f32> {
         let half_vector = (light_dir + view_dir).normalize();
         let n_dot_l = normal.dot(&light_dir).max(0.0);
         let n_dot_v = normal.dot(&view_dir).max(0.0);
         let n_dot_h = normal.dot(&half_vector).max(0.0);
         let v_dot_h = view_dir.dot(&half_vector).max(0.0);
-        let alpha = self.roughness * self.roughness;
+        if n_dot_l <= 0.0 || n_dot_v <= 0.0 {
+            return Vector3::zeros();
+        }
 
-        let d = self.ggx_distribution(n_dot_h, alpha);
-        //let g = self.geometry_smith(&normal, &view_dir, &light_dir, alpha);
-        let g = self.schlick_masking_term(n_dot_v, n_dot_l, alpha);
-        let f = self.fresnel_schlick(v_dot_h, Vector3::new(0.04, 0.04, 0.04));
+        let alpha = self.alpha();
+        let f0 = self.f0_from_albedo(albedo);
 
-        //f * (d * g / (4.0 * n_dot_v * n_dot_l + 1e-5))
-        d * g * f / (4.0 * n_dot_v * n_dot_l + 1e-5)
+        let d = Self::ggx_ndf(n_dot_h, alpha);
+        let g = Self::smith_geometry(n_dot_v, n_dot_l, alpha);
+        let f = Self::schlick_fresnel(v_dot_h, f0);
+        let specular = f * (d * g / (4.0 * n_dot_v * n_dot_l + 1e-6));
+        let diffuse = albedo * ((1.0 - self.metallic) / PI);
+
+        diffuse + specular
     }
 
-    fn ggx_distribution(&self, n_dot_h: f32, alpha: f32) -> f32 {
-        // AI suggested this:
-        //let denom = n_dot_h * n_dot_h * (alpha * alpha) + 1.0;
-        let denom = (n_dot_h * alpha - n_dot_h) * n_dot_h + 1.0;
-        alpha / (std::f32::consts::PI * denom * denom)
+    fn alpha(&self) -> f32 {
+        let roughness = self.roughness.clamp(0.02, 1.0);
+        (roughness * roughness).max(1e-4)
     }
 
-    // Smith’s separable masking-shadowing approximation:
-    fn geometry_schlick_ggx(&self, n_dot_v: f32, alpha: f32) -> f32 {
-        // AI suggested this:
-        let k = (alpha + 1.0).powi(2) / 8.0;
-
-        n_dot_v / (n_dot_v * (1.0 - k) + k)
+    fn f0_from_albedo(&self, albedo: &Vector3<f32>) -> Vector3<f32> {
+        let dielectric_f0 = Vector3::new(0.04, 0.04, 0.04);
+        dielectric_f0 + (albedo - dielectric_f0) * self.metallic
     }
 
-    fn geometry_smith(&self, n: &Vector3<f32>, v: &Vector3<f32>, l: &Vector3<f32>, alpha: f32) -> f32 {
-        // AI suggested this:
-        //let k = (alpha + 1.0).powi(2) / 8.0;
-
-        let n_dot_v = n.dot(v).max(0.0);
-        let n_dot_l = n.dot(l).max(0.0);
-        let ggx1 = self.geometry_schlick_ggx(n_dot_v, alpha);
-        let ggx2 = self.geometry_schlick_ggx(n_dot_l, alpha);
-
-        ggx1 * ggx2
+    fn specular_sampling_probability(&self, f0: &Vector3<f32>) -> f32 {
+        let max_f0 = f0.x.max(f0.y).max(f0.z);
+        Self::lerp(0.08, 0.95, max_f0).clamp(0.08, 0.95)
     }
 
-    fn schlick_masking_term(&self, n_dot_v: f32, n_dot_l: f32, alpha: f32) -> f32 {
-        let k = alpha / 2.0;
+    fn sample_ggx_half_vector(&self, normal: &Vector3<f32>, alpha: f32, rng: &mut impl Rng) -> Vector3<f32> {
+        let u1: f32 = rng.random();
+        let u2: f32 = rng.random();
 
-        let g_v = n_dot_v / (n_dot_v * (1.0 - k) + k);
-        let g_l = n_dot_l / (n_dot_l * (1.0 - k) + k);
-        g_v * g_l
+        let phi = 2.0 * PI * u1;
+        let a2 = alpha * alpha;
+        let cos_theta = ((1.0 - u2) / (1.0 + (a2 - 1.0) * u2)).sqrt();
+        let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
+
+        let h_local = Vector3::new(sin_theta * phi.cos(), sin_theta * phi.sin(), cos_theta);
+        let basis = CoordinateSystem::from_normal(normal);
+        (basis.u * h_local.x + basis.v * h_local.y + basis.w * h_local.z).normalize()
     }
 
     fn fresnel_schlick(&self, l_dot_h: f32, f0: Vector3<f32>) -> Vector3<f32> {
-        // AI suggested cos_theta instead of l_dot_h and cos_theta = v_dot_h in its example.
-        f0 + (Vector3::new(1.0, 1.0, 1.0) - f0) * (1.0 - l_dot_h).powf(5.0)
+        Self::schlick_fresnel(l_dot_h, f0)
     }
 
 
