@@ -12,6 +12,7 @@ pub struct Material {
 
     color: Vector3<f32>,
     texture: Option<Texture>,
+    normal_map: Option<Texture>,
     emissive_texture: Option<Texture>,
     emissive: Vector3<f32>,
     roughness: f32,
@@ -43,10 +44,11 @@ pub struct BsdfSample {
 }
 
 impl Material {
-    pub fn new(color: Vector3<f32>, texture: Option<Texture>, emissive_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32) -> Self {
+    pub fn new(color: Vector3<f32>, texture: Option<Texture>, normal_map: Option<Texture>, emissive_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32) -> Self {
         Self {
             color,
             texture,
+            normal_map,
             emissive_texture,
             emissive,
             roughness,
