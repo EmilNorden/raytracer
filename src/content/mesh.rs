@@ -15,14 +15,7 @@ pub struct MeshData {
     geometry: KDTree,
     material: Material,
 }
-#[derive(Clone)]
-pub struct Mesh {
-    mesh_index: usize,
-    data: Arc<MeshData>,
-    position: Point3<f32>,
-    transform: nalgebra::Matrix4<f32>,
-    inverse_transform: nalgebra::Matrix4<f32>,
-}
+
 
 impl MeshData {
     pub fn new<I: IntoIterator<Item = Triangle>>(triangle_iter: I, material: Material) -> Self {
@@ -36,10 +29,13 @@ impl MeshData {
     }
 
     fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Intersection> {
+        let closest_intersection = self.geometry.intersects(ray);
 
-       let closest_intersection = self.geometry.intersects(ray);
+        closest_intersection.and_then(|x| {
+            if x.dist < t_min || x.dist > t_max {
+                return None;
+            }
 
-        closest_intersection.map(|x| {
             // TODO: Should I only return the barycentric UV coordinates and the triangle, and only interpolate these parameters once I have found the true intersection?
             let tex_coord0 = x.triangle.v0().uv;
             let tex_coord1 = x.triangle.v1().uv;
@@ -55,11 +51,11 @@ impl MeshData {
 
             let normal = normal0 * w + normal1 * x.barycentric.x + normal2 * x.barycentric.y;
 
-            Intersection {
+            Some(Intersection {
                 dist: x.dist,
                 tex_coord,
                 normal
-            }
+            })
         })
     }
 
@@ -72,8 +68,16 @@ impl MeshData {
     }
 }
 
+#[derive(Clone)]
+pub struct MeshInstance {
+    mesh_index: usize,
+    data: Arc<MeshData>,
+    position: Point3<f32>,
+    transform: nalgebra::Matrix4<f32>,
+    inverse_transform: nalgebra::Matrix4<f32>,
+}
 
-impl Mesh {
+impl MeshInstance {
     pub fn new(mesh_index: usize, data: Arc<MeshData>, position: Point3<f32>, transform: nalgebra::Matrix4<f32>) -> Self {
         Self {
             mesh_index,
@@ -102,7 +106,7 @@ impl Mesh {
     }
 }
 
-impl Intersectable for Mesh {
+impl Intersectable for MeshInstance {
     fn bounds(&self) -> AABB {
         self.data.bounds()
     }
@@ -118,9 +122,13 @@ impl Intersectable for Mesh {
             }
         })
     }
+
+    fn transform(&self) -> &nalgebra::Matrix4<f32> {
+        &self.transform
+    }
 }
 
-impl Shadeable for Mesh {
+impl Shadeable for MeshInstance {
     fn material(&self) -> &Material {
         &self.data.material
     }
@@ -145,7 +153,7 @@ mod tests {
                 Vertex { position: Point3::new( -1.0, -1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0) }
             ]),
         ];
-        let material = Material::new(Vector3::zeros(), None, None, Vector3::zeros(), 0.0);
+        let material = Material::new(Vector3::zeros(), None, None, None, Vector3::zeros(), 0.0, 0.0, 0.0, 0.0);
         Arc::new(MeshData::new(triangles, material))
     }
     #[test]
@@ -153,7 +161,7 @@ mod tests {
         let mesh_data = create_test_mesh();
 
         let transform = Matrix4::new_scaling(5.0);
-        let mesh = Mesh::new(0, mesh_data, Point3::default(), transform);
+        let mesh = MeshInstance::new(0, mesh_data, Point3::default(), transform);
 
         let ray = Ray::new(Point3::new(0.0, 0.0, 10.0), Vector3::new(0.0, 0.0, -1.0));
 
@@ -165,7 +173,7 @@ mod tests {
     fn intersect_should_return_normal_in_world_space_for_identity_mesh() {
         let mesh_data = create_test_mesh();
 
-        let identity_mesh = Mesh::new(0, mesh_data.clone(), Point3::default(), Matrix4::identity());
+        let identity_mesh = MeshInstance::new(0, mesh_data.clone(), Point3::default(), Matrix4::identity());
 
         let ray = Ray::new(Point3::new(0.0, 0.0, 10.0), Vector3::new(0.0, 0.0, -1.0));
         let intersection = identity_mesh.intersect(&ray, 0.0, 1000.0).unwrap();
@@ -178,7 +186,7 @@ mod tests {
 
         let transform =
             Matrix4::new_rotation(Vector3::new(-std::f32::consts::FRAC_PI_2, 0.0, 0.0));
-        let mesh = Mesh::new(0, mesh_data.clone(), Point3::default(), transform);
+        let mesh = MeshInstance::new(0, mesh_data.clone(), Point3::default(), transform);
 
         let ray = Ray::new(Point3::new(0.0, 10.0, 0.0), Vector3::new(0.0, -1.0, 0.0));
         let intersection = mesh.intersect(&ray, 0.0, 1000.0).unwrap();

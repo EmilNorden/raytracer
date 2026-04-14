@@ -86,7 +86,7 @@ impl KDTree {
         };
 
         if global_tmax.is_nan() || global_tmin.is_nan() || global_tmax.is_infinite() || global_tmin.is_infinite() {
-            println!("Oh no something is wrong");
+            panic!("Oh no something is wrong");
         }
 
         let mut nodes = StaticStack::<NodeSearchData, 100>::new_with_default(
@@ -104,7 +104,6 @@ impl KDTree {
 
             if node.is_leaf() {
                 if let Some(hit) = Self::intersects_mesh(self, ray, node, tmax) {
-                    // TODO: Här sätter jag hit.dist = tmax, men det borde väl intersects_mesh göra?
                     return Some(hit);
                 }
             } else {

@@ -28,7 +28,7 @@ impl PathTracingIntegrator {
         let mut direct_light = Vector3::zeros();
         if let Some((light_point, light_normal, light_emissive, light_pdf)) = scene.sample_light(rng) {
             // Direction and distance to light
-            let to_light =  light_point - surface_point;
+            let to_light = light_point - surface_point;
             let distance_sq = to_light.magnitude_squared();
             let light_dir = to_light.normalize();
 
@@ -47,11 +47,22 @@ impl PathTracingIntegrator {
 
         // Indirect lighting: BSDF sampling for next bounce
         let sample = hit.material.sample_bsdf(ray.direction(), hit.intersection.normal, albedo, rng);
-        let new_ray = Ray::new(surface_point, sample.direction);
+
+        // Offset based on outgoing hemisphere relative to the geometric normal.
+        // This works for reflection and for both entering/exiting transmission.
+        let n = hit.intersection.normal;
+        let offset_sign = if sample.direction.dot(&n) >= 0.0 { 1.0 } else { -1.0 };
+        let indirect_origin = hit_point + n * (0.001 * offset_sign);
+
+        let new_ray = Ray::new(indirect_origin, sample.direction);
         let indirect_light = Self::trace(&new_ray, scene, depth-1, rng);
 
         // Apply importance sampling: divide by PDF
-        let cos_theta = sample.direction.dot(&hit.intersection.normal).max(0.0);
+        let cos_theta = if sample.is_transmission {
+            sample.direction.dot(&n).abs()
+        } else {
+            sample.direction.dot(&n).max(0.0)
+        };
         let weighted_contribution = if sample.pdf > 1e-5 {
             (indirect_light.component_mul(&sample.bsdf_value) * cos_theta) / sample.pdf
         } else {

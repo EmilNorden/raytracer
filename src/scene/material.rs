@@ -168,7 +168,7 @@ impl Material {
 
 
     pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
-        let n = normal.normalize();
+        let n = normal;
         let v = (-incoming).normalize();
         let n_dot_v = n.dot(&v).max(0.0);
 

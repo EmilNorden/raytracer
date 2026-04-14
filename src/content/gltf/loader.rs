@@ -11,7 +11,7 @@ use gltf::mesh::Mode;
 use gltf::Node;
 use gltf::scene::iter;
 use crate::content::gltf::material::create_material;
-use crate::content::mesh::{Mesh, MeshData};
+use crate::content::mesh::{MeshInstance, MeshData};
 use crate::content::triangle::{Triangle, Vertex};
 use crate::options::RenderOptions;
 use crate::scene::material::Material;
@@ -55,7 +55,7 @@ impl GltfLoader {
         Ok(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov()))
     }
 
-    fn create_meshes_in_children(parent: &Node, current_transform: Matrix4<f32>, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Mesh>> {
+    fn create_meshes_in_children(parent: &Node, current_transform: Matrix4<f32>, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<MeshInstance>> {
         let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
 
         let child_transform = current_transform * Matrix4::from(parent.transform().matrix());
@@ -75,7 +75,7 @@ impl GltfLoader {
                 let transform = child_transform * Matrix4::from(node.transform().matrix());
 
                 for data in mesh_data {
-                    meshes.push(Mesh::new(mesh.index(), data, Self::extract_translation(&transform), transform));
+                    meshes.push(MeshInstance::new(mesh.index(), data, Self::extract_translation(&transform), transform));
                 }
             }
 
@@ -87,7 +87,7 @@ impl GltfLoader {
         Ok(meshes)
     }
 
-    fn create_meshes(scene: &gltf::scene::Scene, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Mesh>> {
+    fn create_meshes(scene: &gltf::scene::Scene, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<MeshInstance>> {
         let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
 
         let mut meshes = Vec::new();
@@ -105,7 +105,7 @@ impl GltfLoader {
                 let transform = Matrix4::from(node.transform().matrix());
 
                 for data in mesh_data {
-                    meshes.push(Mesh::new(mesh.index(), data, Self::extract_translation(&transform), transform));
+                    meshes.push(MeshInstance::new(mesh.index(), data, Self::extract_translation(&transform), transform));
                 }
             }
 
@@ -120,7 +120,6 @@ impl GltfLoader {
         let mut material_map : Vec<Option<Arc<Material>>> = vec![None; total_material_count];
 
         let mut meshes = Vec::new();
-        println!("mesh: {:?}", mesh.name());
 
         for primitive in mesh.primitives() {
             let mut triangles = Vec::new();

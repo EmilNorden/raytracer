@@ -27,6 +27,8 @@ pub struct ShadingContext<'a> {
 pub trait Intersectable {
     fn bounds(&self) -> AABB;
     fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Intersection>;
+
+    fn transform(&self) -> &Matrix4<f32>;
 }
 
 pub trait Shadeable {
@@ -82,6 +84,10 @@ impl Intersectable for Sphere {
             dist: root,
             tex_coord: Vector2::new(0.0, 0.0),
             normal: (ray.origin() + ray.direction() * root - self.position).normalize()})
+    }
+
+    fn transform(&self) -> &Matrix4<f32> {
+        unimplemented!()
     }
 }
 

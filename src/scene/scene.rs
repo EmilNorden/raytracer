@@ -1,8 +1,9 @@
 use nalgebra::{Matrix4, Point3, Vector3};
+use crate::acceleration::bvh::BVH;
 use crate::camera::perspective_camera::PerspectiveCamera;
-use crate::content::mesh::Mesh;
+use crate::content::mesh::MeshInstance;
 use crate::core::Ray;
-use crate::scene::{Intersectable, Shadeable, Intersection, ShadingContext};
+use crate::scene::{Intersectable, Shadeable, ShadingContext};
 
 pub struct SceneNode {
     pub transform: Matrix4<f32>,
@@ -11,27 +12,41 @@ pub struct SceneNode {
 }
 pub struct Scene {
     pub camera: PerspectiveCamera, // TODO: Replace with camera trait
-    meshes: Vec<Mesh>,
-    emissive_meshes: Vec<Mesh>,
+    meshes: Vec<MeshInstance>,
+    bvh: BVH,
+    emissive_meshes: Vec<MeshInstance>,
 }
 
 impl Scene {
-    pub fn new(camera: PerspectiveCamera, meshes: Vec<Mesh>) -> Self {
+    pub fn new(camera: PerspectiveCamera, mut meshes: Vec<MeshInstance>) -> Self {
         let mut emissive_meshes = Vec::new();
         for mesh in &meshes {
             if mesh.material().emissive_factor() != Vector3::zeros() {
                 emissive_meshes.push(mesh.clone());
             }
         }
+
+        let bvh = BVH::new(&mut meshes);
+
+
         Self {
             camera,
             meshes,
+            bvh,
             emissive_meshes,
         }
     }
 
     pub fn intersect(&self, ray: &Ray) -> Option<ShadingContext> {
-        let mut best_dist = f32::MAX;
+       self.bvh.intersect(self.meshes.as_slice(), ray).map(|(mesh_index, hit)| {
+            ShadingContext {
+                ray: ray.clone(),
+                intersection: hit,
+                material: self.meshes[mesh_index as usize].material(),
+                mesh_index: self.meshes[mesh_index as usize].mesh_index(),
+            }
+        })
+        /*let mut best_dist = f32::MAX;
         let mut best_hit = None;
         for object in &self.meshes {
 
@@ -48,10 +63,10 @@ impl Scene {
             }
         }
 
-        best_hit
+        best_hit*/
     }
 
-    pub fn emissive_meshes(&self) -> &Vec<Mesh> {
+    pub fn emissive_meshes(&self) -> &Vec<MeshInstance> {
         &self.emissive_meshes
     }
 
@@ -91,15 +106,17 @@ impl Scene {
     pub fn is_visible(&self, p1: Point3<f32>, p2: Point3<f32>) -> bool {
         let direction = p2 - p1;
         let distance = direction.norm();
-        let ray = Ray::new(p1.into(), direction / distance);
-
-        // Cast shadow ray
-        if let Some(hit) = self.intersect(&ray) {
-            // If we hit something before reaching the light, it's occluded
-            hit.intersection.dist >= distance - 0.001
-        } else {
-            true
+        if distance <= 1e-5 {
+            return true;
         }
+
+        let ray = Ray::new(p1.into(), direction / distance);
+        let t_min = 0.001;
+        let t_max = (distance - 0.001).max(0.0);
+
+        self.bvh
+            .intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max)
+            .is_none()
     }
 }
 
