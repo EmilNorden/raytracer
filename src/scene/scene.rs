@@ -4,6 +4,7 @@ use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::MeshInstance;
 use crate::core::Ray;
 use crate::scene::{Intersectable, Shadeable, ShadingContext};
+use crate::scene::light::{LightSource, PointLight};
 
 pub struct SceneNode {
     pub transform: Matrix4<f32>,
@@ -14,17 +15,18 @@ pub struct Scene {
     pub camera: PerspectiveCamera, // TODO: Replace with camera trait
     meshes: Vec<MeshInstance>,
     bvh: BVH,
-    emissive_meshes: Vec<MeshInstance>,
+    lights: Vec<LightSource>,
 }
 
 impl Scene {
-    pub fn new(camera: PerspectiveCamera, mut meshes: Vec<MeshInstance>) -> Self {
-        let mut emissive_meshes = Vec::new();
+    pub fn new(camera: PerspectiveCamera, mut meshes: Vec<MeshInstance>, mut point_lights: Vec<PointLight>) -> Self {
+        let mut lights = Vec::new();
         for mesh in &meshes {
             if mesh.material().emissive_factor() != Vector3::zeros() {
-                emissive_meshes.push(mesh.clone());
+                lights.push(LightSource::Mesh(mesh.clone()));
             }
         }
+        lights.append(&mut point_lights.into_iter().map(LightSource::Point).collect());
 
         let bvh = BVH::new(&mut meshes);
 
@@ -33,7 +35,7 @@ impl Scene {
             camera,
             meshes,
             bvh,
-            emissive_meshes,
+            lights,
         }
     }
 
@@ -66,8 +68,8 @@ impl Scene {
         best_hit*/
     }
 
-    pub fn emissive_meshes(&self) -> &Vec<MeshInstance> {
-        &self.emissive_meshes
+    pub fn lights(&self) -> &Vec<LightSource> {
+        &self.lights
     }
 
     pub fn environment(&self, ray: &Ray) -> Vector3<f32> {
@@ -77,29 +79,48 @@ impl Scene {
     /// Sample a random point on a random emissive surface
     /// Returns (point, normal, emissive_color, pdf)
     pub fn sample_light(&self, rng: &mut impl rand::Rng) -> Option<(Point3<f32>, Vector3<f32>, Vector3<f32>, f32)> {
-        if self.emissive_meshes.is_empty() {
+        if self.lights.is_empty() {
             return None;
         }
 
-        let mesh_index = rng.random_range(0..self.emissive_meshes.len());
-        let mesh = &self.emissive_meshes[mesh_index];
+        let light_index = rng.random_range(0..self.lights.len());
+        let light = &self.lights[light_index];
 
-        // Sample a random point on the mesh by sampling a random triangle
-        let triangle_index = rng.random_range(..mesh.triangle_count() as usize);
+        match light {
+            LightSource::Point(point_light) => {
+                let u = (rng.random::<f32>() * 2.0) - 1.0;
+                let v = (rng.random::<f32>() * 2.0) - 1.0;
+                let w = (rng.random::<f32>() * 2.0) - 1.0;
+                let point = point_light.position + (Vector3::new(u, v, w) * point_light.radius);
+                let normal = (point - point_light.position).normalize();
 
-        let triangle = mesh.triangle_at(triangle_index);
+                let area = 4.0 * std::f32::consts::PI * point_light.radius * point_light.radius;
+                let pdf = 1.0 / area;
 
-        let (point, normal) = triangle.sample_uniform_point(rng);
+                let emissive = point_light.color * point_light.intensity;
+
+                Some((point, normal, emissive, pdf))
+
+            }
+            LightSource::Mesh(mesh) => {
+                // Sample a random point on the mesh by sampling a random triangle
+                let triangle_index = rng.random_range(..mesh.triangle_count() as usize);
+
+                let triangle = mesh.triangle_at(triangle_index);
+
+                let (point, normal) = triangle.sample_uniform_point(rng);
 
 
-        let emissive = mesh.material().emissive_factor();
+                let emissive = mesh.material().emissive_factor();
 
-        // PDF is 1/area. For now, use a rough estimate 
-        let bounds = mesh.bounds();
-        let area = (bounds.max().x - bounds.min().x) * (bounds.max().z - bounds.min().z);
-        let pdf = 1.0 / area;
+                // PDF is 1/area. For now, use a rough estimate
+                let bounds = mesh.bounds();
+                let area = (bounds.max().x - bounds.min().x) * (bounds.max().z - bounds.min().z);
+                let pdf = 1.0 / area;
 
-        Some((point, normal, emissive, pdf))
+                Some((point, normal, emissive, pdf))
+            }
+        }
     }
 
     /// Check if there's an unoccluded path between two points

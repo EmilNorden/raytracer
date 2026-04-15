@@ -1,4 +1,5 @@
 
+use gltf::khr_lights_punctual::Kind;
 use std::path::Path;
 use gltf::camera::Projection;
 use nalgebra::{Matrix4, Point3, Vector2, Vector3};
@@ -14,6 +15,7 @@ use crate::content::gltf::material::create_material;
 use crate::content::mesh::{MeshInstance, MeshData};
 use crate::content::triangle::{Triangle, Vertex};
 use crate::options::RenderOptions;
+use crate::scene::light::PointLight;
 use crate::scene::material::Material;
 
 pub struct GltfLoader{}
@@ -200,6 +202,27 @@ impl GltfLoader {
 
         Ok(meshes)
     }
+
+    fn create_point_lights(scene: &gltf::scene::Scene) -> Vec<PointLight> {
+        let mut lights = Vec::new();
+        for node in scene.nodes() {
+            if let Some(light) = node.light() {
+                match light.kind() {
+                    Kind::Point => {
+                        let transform = Matrix4::from(node.transform().matrix());
+                        let position = Self::extract_translation(&transform);
+                        let intensity = light.intensity();
+
+                        let color = light.color();
+                        lights.push(PointLight::new(position, Vector3::new(color[0], color[1], color[2]), intensity, 1.0))
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        lights
+    }
 }
 impl SceneLoader for GltfLoader {
     fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions) -> anyhow::Result<Scene> {
@@ -217,14 +240,18 @@ impl SceneLoader for GltfLoader {
             println!("Processing meshes..");
             let meshes = Self::create_meshes(&scene, &buffers, document.meshes().len(), document.materials().len(), parent_folder)?;
 
+            let lights = Self::create_point_lights(&scene);
             let triangles: usize = meshes.iter().map(|x| x.triangle_count()).sum();
             println!("Loaded {} meshes with {} triangles", meshes.len(), triangles);
 
-            Ok(Scene::new(camera, meshes))
+
+
+            Ok(Scene::new(camera, meshes, lights))
         }
         else { Err(SceneError::NoDefaultScene.into()) }
     }
 }
+
 /*
 fn traverse_nodes(nodes: Nodes) {
     for n in nodes {

@@ -5,6 +5,7 @@ use crate::camera::viewpoint::Viewpoint;
 use crate::core::Ray;
 use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
+use crate::scene::light::LightSource;
 use crate::scene::scene::Scene;
 use crate::scene::ShadingContext;
 
@@ -40,14 +41,29 @@ impl Integrator for WhittedIntegrator {
                     let intersection_point = ray.origin() + ray.direction() * hit.intersection.dist;
 
                     let mut L_d = Vector3::new(0.0, 0.0, 0.0);
-                    for light in scene.emissive_meshes() {
-                        let light_dir = (light.position() - intersection_point).normalize();
-                        let shadow_ray = Ray::new(intersection_point + light_dir * 0.05, light_dir);
+                    for light in scene.lights() {
+                        match light {
+                            LightSource::Point(point_light) => {
+                                let light_dir = (point_light.position - intersection_point).normalize();
+                                let light_distance =  nalgebra::distance(&point_light.position, &intersection_point) - point_light.radius;
+                                let shadow_ray = Ray::new(intersection_point + light_dir * 0.05, light_dir);
 
-                        if let Some(shadow_hit) = scene.intersect(&shadow_ray) {
-                            if light.mesh_index() == shadow_hit.mesh_index {
-                                L_d += shadow_hit.material.sample_emissive(shadow_hit.intersection.tex_coord.x, shadow_hit.intersection.tex_coord.y)
-                                     * shadow_ray.direction().dot(&hit.intersection.normal).max(0.0);
+                                if let  Some(shadow_hit) = scene.intersect(&shadow_ray) {
+                                    if shadow_hit.intersection.dist >= light_distance {
+
+                                    }
+                                }
+                            }
+                            LightSource::Mesh(mesh) => {
+                                let light_dir = (mesh.position() - intersection_point).normalize();
+                                let shadow_ray = Ray::new(intersection_point + light_dir * 0.05, light_dir);
+
+                                if let Some(shadow_hit) = scene.intersect(&shadow_ray) {
+                                    if mesh.mesh_index() == shadow_hit.mesh_index {
+                                        L_d += shadow_hit.material.sample_emissive(shadow_hit.intersection.tex_coord.x, shadow_hit.intersection.tex_coord.y)
+                                            * shadow_ray.direction().dot(&hit.intersection.normal).max(0.0);
+                                    }
+                                }
                             }
                         }
                     }

@@ -1,14 +1,25 @@
-use nalgebra::Point3;
+use nalgebra::{Point3, Vector3};
 use crate::content::mesh::MeshInstance;
 
-enum LightSource {
+pub enum LightSource {
     Point(PointLight),
     Mesh(MeshInstance),
 }
 
-struct PointLight {
-    color: Point3<f32>,
-    intensity: f32,
-    position: Point3<f32>,
-    radius: f32,
+pub struct PointLight {
+    pub color: Vector3<f32>,
+    pub intensity: f32,
+    pub position: Point3<f32>,
+    pub radius: f32,
+}
+
+impl PointLight {
+    pub fn new(position: Point3<f32>, color: Vector3<f32>, intensity: f32, radius: f32) -> Self {
+        Self {
+            color,
+            intensity,
+            position,
+            radius,
+        }
+    }
 }

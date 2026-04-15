@@ -134,8 +134,8 @@ fn main() {
 
     let scene = GltfLoader::load_scene(&options.scene_file, &options).unwrap();
 
-    if scene.emissive_meshes().is_empty() {
-        println!("No emissive materials found in scene. Aborting");
+    if scene.lights().is_empty() {
+        println!("No light sources found in scene. Aborting");
         return;
     }
 
