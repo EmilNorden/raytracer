@@ -1,5 +1,5 @@
 use std::f32::consts::PI;
-use nalgebra::{Vector2, Vector3};
+use nalgebra::{Matrix3, Vector2, Vector3, Vector4};
 use rand::Rng;
 use crate::scene::coordinate_system::CoordinateSystem;
 use crate::scene::texture::{Channel, Texture};
@@ -15,6 +15,7 @@ pub struct Material {
     normal_map: Option<Texture>,
     emissive_texture: Option<Texture>,
     metallic_roughness_texture: Option<Texture>,
+    normal_scale: f32,
     emissive: Vector3<f32>,
     roughness: f32,
     f0: Vector3<f32>,
@@ -45,13 +46,14 @@ pub struct BsdfSample {
 }
 
 impl Material {
-    pub fn new(color: Vector3<f32>, texture: Option<Texture>, normal_map: Option<Texture>, emissive_texture: Option<Texture>, metallic_roughness_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32) -> Self {
+    pub fn new(color: Vector3<f32>, texture: Option<Texture>, normal_map: Option<Texture>, emissive_texture: Option<Texture>, metallic_roughness_texture: Option<Texture>, normal_scale: f32, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32) -> Self {
         Self {
             color,
             texture,
             normal_map,
             emissive_texture,
             metallic_roughness_texture,
+            normal_scale,
             emissive,
             roughness,
             f0: Vector3::new(0.04, 0.04, 0.04),  // Standard dielectric F0
@@ -62,8 +64,41 @@ impl Material {
     }
 
     pub fn color(&self) -> Vector3<f32> { self.color }
+
     pub fn roughness(&self, tex_coords: Vector2<f32>) -> f32 {
         self.metallic_roughness_texture.as_ref().map(|t| t.sample_channel(tex_coords.x, tex_coords.y, Channel::G)).unwrap_or(self.roughness)
+    }
+
+    pub fn metallicness(&self, tex_coords: Vector2<f32>) -> f32 {
+        self.metallic_roughness_texture.as_ref().map(|t| t.sample_channel(tex_coords.x, tex_coords.y, Channel::B)).unwrap_or(self.metallic)
+    }
+
+    pub fn apply_normal_map(&self, normal: Vector3<f32>, tangent: Vector4<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
+        if let Some(normal_map) = &self.normal_map {
+            let shading_normal = normal.normalize();
+            let tangent_xyz = tangent.xyz();
+
+            if tangent_xyz.norm_squared() <= 1e-12 {
+                return shading_normal;
+            }
+
+            let tangent_dir =
+                (tangent_xyz - shading_normal * shading_normal.dot(&tangent_xyz)).normalize();
+            let handedness = if tangent.w < 0.0 { -1.0 } else { 1.0 };
+            let bitangent = shading_normal.cross(&tangent_dir).normalize() * handedness;
+            let tbn = Matrix3::from_columns(&[tangent_dir, bitangent, shading_normal]);
+
+            let mut normal_tangent_space =
+                normal_map.sample_color(tex_coords.x, tex_coords.y) * 2.0 - Vector3::new(1.0, 1.0, 1.0);
+            normal_tangent_space.x *= self.normal_scale;
+            normal_tangent_space.y *= self.normal_scale;
+            normal_tangent_space = normal_tangent_space.normalize();
+
+            (tbn * normal_tangent_space).normalize()
+        }
+        else {
+            normal.normalize()
+        }
     }
 
     pub fn emissive_factor(&self) -> Vector3<f32> { self.emissive }
@@ -172,6 +207,12 @@ impl Material {
     }
 
 
+    /// Sample one BSDF lobe and return the sampled direction together with the
+    /// corresponding BSDF value and the PDF of generating that sample.
+    ///
+    /// Note: `bsdf_value` here is the contribution of the sampled lobe, not a
+    /// full evaluation of all lobes. That is intentional because `pdf` is also
+    /// branch-conditioned (e.g. `specular_prob * pdf_spec`).
     pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, tex_coords: Vector2<f32>, rng: &mut impl Rng) -> BsdfSample {
         let n = normal;
         let v = (-incoming).normalize();
@@ -215,7 +256,7 @@ impl Material {
         }
 
         let alpha = self.alpha(tex_coords);
-        let f0 = self.f0_from_albedo(&albedo);
+        let f0 = self.f0_from_albedo(&albedo, tex_coords);
         let specular_prob = self.specular_sampling_probability(&f0);
 
         if rng.random::<f32>() < specular_prob {
@@ -277,7 +318,7 @@ impl Material {
             };
         }
 
-        let kd = 1.0 - self.metallic;
+        let kd = 1.0 - self.metallicness(tex_coords);
         let bsdf_value = albedo * (kd / PI);
         let pdf_diffuse = n_dot_l / PI;
 
@@ -326,8 +367,11 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         )
     }
 
-    // GGX BRDF
-    pub fn brdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
+    /// Evaluate the reflective BSDF for a specific pair of directions.
+    ///
+    /// This is what you want when the outgoing direction is already known,
+    /// for example during next-event estimation / direct light sampling.
+    pub fn evaluate_bsdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
         let half_vector = (light_dir + view_dir).normalize();
         let n_dot_l = normal.dot(&light_dir).max(0.0);
         let n_dot_v = normal.dot(&view_dir).max(0.0);
@@ -338,13 +382,13 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         }
 
         let alpha = self.alpha(tex_coords);
-        let f0 = self.f0_from_albedo(albedo);
+        let f0 = self.f0_from_albedo(albedo, tex_coords);
 
         let d = Self::ggx_ndf(n_dot_h, alpha);
         let g = Self::smith_geometry(n_dot_v, n_dot_l, alpha);
         let f = Self::schlick_fresnel(v_dot_h, f0);
         let specular = f * (d * g / (4.0 * n_dot_v * n_dot_l + 1e-6));
-        let diffuse = albedo * ((1.0 - self.metallic) / PI);
+        let diffuse = albedo * ((1.0 - self.metallicness(tex_coords)) / PI);
 
         diffuse + specular
     }
@@ -354,9 +398,9 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         (roughness * roughness).max(1e-4)
     }
 
-    fn f0_from_albedo(&self, albedo: &Vector3<f32>) -> Vector3<f32> {
+    fn f0_from_albedo(&self, albedo: &Vector3<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
         let dielectric_f0 = Vector3::new(0.04, 0.04, 0.04);
-        dielectric_f0 + (albedo - dielectric_f0) * self.metallic
+        dielectric_f0 + (albedo - dielectric_f0) * self.metallicness(tex_coords)
     }
 
     fn specular_sampling_probability(&self, f0: &Vector3<f32>) -> f32 {
@@ -461,5 +505,67 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
 
     fn schlick_fresnel(cos_theta: f32, f0: Vector3<f32>) -> Vector3<f32> {
         f0 + (Vector3::new(1.0, 1.0, 1.0) - f0) * (1.0 - cos_theta).powf(5.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn solid_texture(rgb: [u8; 3]) -> Texture {
+        Texture::new(vec![rgb[0], rgb[1], rgb[2], 255], 1, 1)
+    }
+
+    fn make_material(normal_map: Option<Texture>, normal_scale: f32) -> Material {
+        Material::new(
+            Vector3::new(1.0, 1.0, 1.0),
+            None,
+            normal_map,
+            None,
+            None,
+            normal_scale,
+            Vector3::zeros(),
+            1.0,
+            0.0,
+            0.0,
+            1.5,
+        )
+    }
+
+    #[test]
+    fn apply_normal_map_returns_geometric_normal_without_map() {
+        let material = make_material(None, 1.0);
+        let normal = material.apply_normal_map(
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector4::new(1.0, 0.0, 0.0, 1.0),
+            Vector2::new(0.5, 0.5),
+        );
+
+        assert!((normal - Vector3::new(0.0, 0.0, 1.0)).norm() <= 1e-6);
+    }
+
+    #[test]
+    fn apply_normal_map_respects_tangent_frame() {
+        let material = make_material(Some(solid_texture([255, 128, 128])), 1.0);
+        let normal = material.apply_normal_map(
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector4::new(1.0, 0.0, 0.0, 1.0),
+            Vector2::new(0.5, 0.5),
+        );
+
+        assert!(normal.x > 0.99);
+        assert!(normal.z.abs() < 0.02);
+    }
+
+    #[test]
+    fn apply_normal_map_falls_back_for_missing_tangent() {
+        let material = make_material(Some(solid_texture([255, 128, 128])), 1.0);
+        let normal = material.apply_normal_map(
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector4::new(0.0, 0.0, 0.0, 1.0),
+            Vector2::new(0.5, 0.5),
+        );
+
+        assert!((normal - Vector3::new(0.0, 0.0, 1.0)).norm() <= 1e-6);
     }
 }

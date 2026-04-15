@@ -1,5 +1,5 @@
 use rayon::iter::ParallelIterator;
-use nalgebra::Vector3;
+use nalgebra::{Vector2, Vector3};
 use rayon::iter::IntoParallelIterator;
 use crate::camera::viewpoint::Viewpoint;
 use crate::frame::Frame;
@@ -29,7 +29,12 @@ impl Integrator for DebugIntegrator {
                     let ray = scene.camera.generate_ray(1.0 - u, 1.0 - v);
 
                     if let Some(hit) = scene.intersect(&ray) {
-                        pixels[x] += hit.intersection.normal;
+                        let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
+                        let v = hit.intersection.tex_coord.y.rem_euclid(1.0);
+                        let tex_coords = Vector2::new(u, v);
+                        let normal = hit.material.apply_normal_map(hit.intersection.normal, hit.intersection.tangent, tex_coords);
+
+                        pixels[x] += normal;
                     }
             }
 

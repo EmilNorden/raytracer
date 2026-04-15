@@ -363,16 +363,19 @@ mod tests {
             Vertex {
                 position: Point3::new(-1.0, -1.0, 0.0),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(0.0, 0.0),
             },
             Vertex {
                 position: Point3::new(1.0, -1.0, 0.0),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(1.0, 0.0),
             },
             Vertex {
                 position: Point3::new(-1.0, 1.0, 0.0),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(0.0, 1.0),
             },
         ])
@@ -384,11 +387,13 @@ mod tests {
             None,
             None,
             None,
+            None,
+            1.0,
             Vector3::zeros(),
             0.0,
             0.0,
             0.0,
-            0.0,
+            1.5,
         );
 
         let data = Arc::new(MeshData::new(vec![make_triangle()], material));

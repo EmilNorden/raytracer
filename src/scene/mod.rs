@@ -1,5 +1,5 @@
 
-use nalgebra::{Matrix, Matrix4, Point3, Vector2, Vector3};
+use nalgebra::{Matrix, Matrix4, Point3, Vector2, Vector3, Vector4};
 use crate::acceleration::bounds::AABB;
 use crate::core::Ray;
 use crate::scene::material::Material;
@@ -15,6 +15,7 @@ pub struct Intersection {
     pub dist: f32,
     pub tex_coord: Vector2<f32>,
     pub normal: Vector3<f32>,
+    pub tangent: Vector4<f32>,
 
 }
 
@@ -84,7 +85,8 @@ impl Intersectable for Sphere {
         Some(Intersection {
             dist: root,
             tex_coord: Vector2::new(0.0, 0.0),
-            normal: (ray.origin() + ray.direction() * root - self.position).normalize()})
+            normal: (ray.origin() + ray.direction() * root - self.position).normalize(),
+        tangent: Vector4::new(0.0, 0.0, 0.0, 0.0),})
     }
 
     fn transform(&self) -> &Matrix4<f32> {

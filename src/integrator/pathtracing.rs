@@ -31,6 +31,8 @@ impl PathTracingIntegrator {
         let hit_point = ray.origin() + ray.direction() * hit.intersection.dist;
         let surface_point = hit_point + hit.intersection.normal * 0.001; // Offset along normal, not ray direction
 
+        let normal = hit.material.apply_normal_map(hit.intersection.normal, hit.intersection.tangent, tex_coords);
+
         // Direct lighting: explicitly sample light sources
         let mut direct_light = Vector3::zeros();
         if let Some((light_point, light_normal, light_emissive, light_pdf)) =
@@ -42,7 +44,7 @@ impl PathTracingIntegrator {
             let light_dir = to_light.normalize();
 
             // Cosine terms
-            let cos_theta = hit.intersection.normal.dot(&light_dir).max(0.0);
+            let cos_theta = normal.dot(&light_dir).max(0.0);
             let cos_theta_light = light_normal.dot(&(-light_dir)).max(0.0);
             if cos_theta > 0.0 && cos_theta_light > 0.0 {
                 // Cast shadow ray to check visibility
@@ -50,7 +52,7 @@ impl PathTracingIntegrator {
                     let view_dir = -ray.direction().normalize();
                     let brdf =
                         hit.material
-                            .brdf(&light_dir, &view_dir, &hit.intersection.normal, &albedo, tex_coords);
+                            .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, tex_coords);
                     direct_light = (light_emissive * (cos_theta_light / (distance_sq * light_pdf)))
                         .component_mul(&brdf)
                         * cos_theta;
@@ -61,11 +63,11 @@ impl PathTracingIntegrator {
         // Indirect lighting: BSDF sampling for next bounce
         let sample =
             hit.material
-                .sample_bsdf(ray.direction(), hit.intersection.normal, albedo, tex_coords, rng);
+                .sample_bsdf(ray.direction(), normal, albedo, tex_coords, rng);
 
         // Offset based on outgoing hemisphere relative to the geometric normal.
         // This works for reflection and for both entering/exiting transmission.
-        let n = hit.intersection.normal;
+        let n = normal;
         let offset_sign = if sample.direction.dot(&n) >= 0.0 {
             1.0
         } else {

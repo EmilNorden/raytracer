@@ -304,16 +304,19 @@ mod tests {
             Vertex {
                 position: Point3::new(-1.0, -1.0, 0.0),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(0.0, 0.0),
             },
             Vertex {
                 position: Point3::new(1.0, -1.0, 0.0),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(1.0, 0.0),
             },
             Vertex {
                 position: Point3::new(0.0, 1.0, 0.0),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(0.5, 1.0),
             },
         ])
@@ -331,16 +334,19 @@ mod tests {
             Vertex {
                 position: Point3::new(center.x - size, center.y - size, center.z),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(0.0, 0.0),
             },
             Vertex {
                 position: Point3::new(center.x + size, center.y - size, center.z),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(1.0, 0.0),
             },
             Vertex {
                 position: Point3::new(center.x, center.y + size, center.z),
                 normal: Vector3::new(0.0, 0.0, 1.0),
+                tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(0.5, 1.0),
             },
         ])

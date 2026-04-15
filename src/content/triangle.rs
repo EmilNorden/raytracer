@@ -1,20 +1,41 @@
 use std::ops::Sub;
-use nalgebra::{Point3, Vector2, Vector3};
+use nalgebra::{Point3, Vector2, Vector3, Vector4};
 use crate::core::Ray;
-use crate::scene::Intersection;
 
 #[derive(Copy, Clone)]
 pub struct Vertex {
     pub position: Point3<f32>,
     pub normal: Vector3<f32>, // TODO: Hmmm
+    pub tangent: Vector4<f32>,
     pub uv: Vector2<f32>,
 }
 
 impl Vertex {
     pub fn transform(&self, transform: &nalgebra::Matrix4<f32>) -> Vertex {
+        let normal_matrix = transform
+            .fixed_view::<3, 3>(0, 0)
+            .into_owned()
+            .try_inverse()
+            .unwrap()
+            .transpose();
+        let orientation_sign = if transform.fixed_view::<3, 3>(0, 0).into_owned().determinant() < 0.0 {
+            -1.0
+        } else {
+            1.0
+        };
+
+        let normal = (normal_matrix * self.normal).normalize();
+        let tangent_dir = normal_matrix * self.tangent.xyz();
+        let tangent = if tangent_dir.norm_squared() <= 1e-12 {
+            nalgebra::Vector4::new(0.0, 0.0, 0.0, self.tangent.w * orientation_sign)
+        } else {
+            tangent_dir.normalize().insert_row(3, self.tangent.w * orientation_sign)
+        };
+
         Vertex {
             position: transform.transform_point(&self.position),
-            normal: transform.transform_vector(&self.normal),
+            normal,
+            tangent,
             uv: self.uv,
         }
     }

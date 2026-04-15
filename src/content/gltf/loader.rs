@@ -2,7 +2,7 @@
 use gltf::khr_lights_punctual::Kind;
 use std::path::Path;
 use gltf::camera::Projection;
-use nalgebra::{Matrix4, Point3, Vector2, Vector3};
+use nalgebra::{Matrix4, Point3, Vector2, Vector3, Vector4};
 use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::scene_loader::{SceneError, SceneLoader};
 use crate::scene::scene::Scene;
@@ -21,6 +21,73 @@ use crate::scene::material::Material;
 pub struct GltfLoader{}
 
 impl GltfLoader {
+
+    fn build_fallback_tangents(
+        positions: &[Point3<f32>],
+        normals: &[Vector3<f32>],
+        tex_coords: &[Vector2<f32>],
+        indices: &[u32],
+    ) -> Vec<Vector4<f32>> {
+        let mut accumulated_tangent = vec![Vector3::zeros(); positions.len()];
+        let mut accumulated_bitangent = vec![Vector3::zeros(); positions.len()];
+
+        for i in (0..indices.len()).step_by(3) {
+            let i0 = indices[i] as usize;
+            let i1 = indices[i + 1] as usize;
+            let i2 = indices[i + 2] as usize;
+
+            let p0 = positions[i0];
+            let p1 = positions[i1];
+            let p2 = positions[i2];
+
+            let uv0 = tex_coords[i0];
+            let uv1 = tex_coords[i1];
+            let uv2 = tex_coords[i2];
+
+            let edge1 = p1 - p0;
+            let edge2 = p2 - p0;
+            let duv1 = uv1 - uv0;
+            let duv2 = uv2 - uv0;
+
+            let determinant = duv1.x * duv2.y - duv1.y * duv2.x;
+            if determinant.abs() <= 1e-8 {
+                continue;
+            }
+
+            let inv_det = 1.0 / determinant;
+            let tangent = (edge1 * duv2.y - edge2 * duv1.y) * inv_det;
+            let bitangent = (edge2 * duv1.x - edge1 * duv2.x) * inv_det;
+            if tangent.norm_squared() <= 1e-12 || bitangent.norm_squared() <= 1e-12 {
+                continue;
+            }
+
+            accumulated_tangent[i0] += tangent;
+            accumulated_tangent[i1] += tangent;
+            accumulated_tangent[i2] += tangent;
+            accumulated_bitangent[i0] += bitangent;
+            accumulated_bitangent[i1] += bitangent;
+            accumulated_bitangent[i2] += bitangent;
+        }
+
+        accumulated_tangent
+            .into_iter()
+            .zip(accumulated_bitangent)
+            .zip(normals.iter())
+            .map(|((tangent, bitangent), normal)| {
+                if tangent.norm_squared() <= 1e-12 {
+                    Vector4::new(1.0, 0.0, 0.0, 1.0)
+                } else {
+                    let tangent_dir = (tangent - *normal * normal.dot(&tangent)).normalize();
+                    let handedness = if normal.cross(&tangent_dir).dot(&bitangent) < 0.0 {
+                        -1.0
+                    } else {
+                        1.0
+                    };
+                    tangent_dir.insert_row(3, handedness)
+                }
+            })
+            .collect()
+    }
 
     fn extract_directions(transform: &Matrix4<f32>) -> (Vector3<f32>, Vector3<f32>, Vector3<f32>) {
         let right = Vector3::new(transform[(0, 0)], transform[(1, 0)], transform[(2, 0)]);
@@ -147,6 +214,10 @@ impl GltfLoader {
                     .collect::<Vec<_>>()
             }).ok_or_else(|| SceneError::UnsupportedFormat("No normals found in mesh".to_string()))?;
 
+            let tangents = reader.read_tangents().map(|tangents| {
+                tangents.map(|t| Vector4::new(t[0], t[1], t[2], t[3])).collect::<Vec<_>>()
+            });
+
             let tex_coords = reader.read_tex_coords(0).map(|tex_coords| {
                 tex_coords.into_f32()
                     .map(|t| Vector2::new(t[0], t[1]))
@@ -157,6 +228,8 @@ impl GltfLoader {
             let indices = reader.read_indices().map(|indices| {
                 indices.into_u32().collect::<Vec<_>>()
             }).ok_or_else(|| SceneError::UnsupportedFormat("No indices found in mesh".to_string()))?;
+
+            let tangents = tangents.unwrap_or_else(|| Self::build_fallback_tangents(&positions, &normals, &tex_coords, &indices));
 
 
             for i in (0..indices.len()).step_by(3) {
@@ -176,21 +249,28 @@ impl GltfLoader {
                 let tex_coord1 = tex_coords[i1 as usize];
                 let tex_coord2 = tex_coords[i2 as usize];
 
+                let tangent0 = tangents[i0 as usize];
+                let tangent1 = tangents[i1 as usize];
+                let tangent2 = tangents[i2 as usize];
+
                 let vertex0 = Vertex {
                     position: pos0,
                     normal: normal0,
+                    tangent: tangent0,
                     uv: tex_coord0,
                 };
 
                 let vertex1 = Vertex {
                     position: pos1,
                     normal: normal1,
+                    tangent: tangent1,
                     uv: tex_coord1,
                 };
 
                 let vertex2 = Vertex {
                     position: pos2,
                     normal: normal2,
+                    tangent: tangent2,
                     uv: tex_coord2,
                 };
 
