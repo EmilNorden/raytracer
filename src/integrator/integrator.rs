@@ -1,3 +1,4 @@
+use nalgebra::Vector3;
 use crate::frame::Frame;
 use crate::integrator::debug::DebugIntegrator;
 use crate::integrator::pathtracing::PathTracingIntegrator;

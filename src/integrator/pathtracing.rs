@@ -1,13 +1,13 @@
-use nalgebra::Vector3;
-use rand::Rng;
-use rayon::iter::IntoParallelIterator;
 use crate::camera::viewpoint::Viewpoint;
 use crate::core::Ray;
 use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
-use crate::scene::scene::Scene;
-use rayon::prelude::*;
 use crate::scene::ShadingContext;
+use crate::scene::scene::Scene;
+use nalgebra::Vector3;
+use rand::Rng;
+use rayon::iter::IntoParallelIterator;
+use rayon::prelude::*;
 
 pub struct PathTracingIntegrator {}
 
@@ -16,7 +16,13 @@ impl PathTracingIntegrator {
         Self {}
     }
 
-    fn  shade(hit: &ShadingContext, ray: &Ray, scene: &Scene, depth: u32, rng: &mut impl Rng) -> Vector3<f32> {
+    fn shade(
+        hit: &ShadingContext,
+        ray: &Ray,
+        scene: &Scene,
+        depth: u32,
+        rng: &mut impl Rng,
+    ) -> Vector3<f32> {
         let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
         let v = hit.intersection.tex_coord.y.rem_euclid(1.0);
         let emissive = hit.material.sample_emissive(u, v);
@@ -26,7 +32,9 @@ impl PathTracingIntegrator {
 
         // Direct lighting: explicitly sample light sources
         let mut direct_light = Vector3::zeros();
-        if let Some((light_point, light_normal, light_emissive, light_pdf)) = scene.sample_light(rng) {
+        if let Some((light_point, light_normal, light_emissive, light_pdf)) =
+            scene.sample_light(rng)
+        {
             // Direction and distance to light
             let to_light = light_point - surface_point;
             let distance_sq = to_light.magnitude_squared();
@@ -39,23 +47,33 @@ impl PathTracingIntegrator {
                 // Cast shadow ray to check visibility
                 if scene.is_visible(surface_point, light_point) {
                     let view_dir = -ray.direction().normalize();
-                    let brdf = hit.material.brdf(&light_dir, &view_dir, &hit.intersection.normal, &albedo);
-                    direct_light = (light_emissive * (cos_theta_light / (distance_sq * light_pdf))).component_mul(&brdf) * cos_theta;
+                    let brdf =
+                        hit.material
+                            .brdf(&light_dir, &view_dir, &hit.intersection.normal, &albedo);
+                    direct_light = (light_emissive * (cos_theta_light / (distance_sq * light_pdf)))
+                        .component_mul(&brdf)
+                        * cos_theta;
                 }
             }
         }
 
         // Indirect lighting: BSDF sampling for next bounce
-        let sample = hit.material.sample_bsdf(ray.direction(), hit.intersection.normal, albedo, rng);
+        let sample =
+            hit.material
+                .sample_bsdf(ray.direction(), hit.intersection.normal, albedo, rng);
 
         // Offset based on outgoing hemisphere relative to the geometric normal.
         // This works for reflection and for both entering/exiting transmission.
         let n = hit.intersection.normal;
-        let offset_sign = if sample.direction.dot(&n) >= 0.0 { 1.0 } else { -1.0 };
+        let offset_sign = if sample.direction.dot(&n) >= 0.0 {
+            1.0
+        } else {
+            -1.0
+        };
         let indirect_origin = hit_point + n * (0.001 * offset_sign);
 
         let new_ray = Ray::new(indirect_origin, sample.direction);
-        let indirect_light = Self::trace(&new_ray, scene, depth-1, rng);
+        let indirect_light = Self::trace(&new_ray, scene, depth - 1, rng);
 
         // Apply importance sampling: divide by PDF
         let cos_theta = if sample.is_transmission {
@@ -76,12 +94,13 @@ impl PathTracingIntegrator {
 
     fn trace(ray: &Ray, scene: &Scene, depth: u32, rng: &mut impl Rng) -> Vector3<f32> {
         if depth == 0 {
-            return Vector3::zeros()
+            return Vector3::zeros();
         }
 
-        scene.intersect(ray).map(|hit| {
-            Self::shade(&hit, ray, scene, depth, rng)
-        }).unwrap_or_else(|| scene.environment(&ray))
+        scene
+            .intersect(ray)
+            .map(|hit| Self::shade(&hit, ray, scene, depth, rng))
+            .unwrap_or_else(|| scene.environment(&ray))
     }
 }
 
@@ -90,26 +109,26 @@ impl Integrator for PathTracingIntegrator {
         // TODO: Can this "threading boilerplate" be moved outside the integrator, so every dont have to do the same thing?
         let width = frame.width() as usize;
         let height = frame.height() as usize;
+        
+        let scanlines = (0..height)
+            .into_par_iter()
+            .map(|y| {
+                let mut rng = rand::rng();
+                let mut pixels = vec![Vector3::new(0.0, 0.0, 0.0); width];
+                let v = y as f32 / height as f32;
+                for x in 0..width {
+                    let u = x as f32 / width as f32;
 
-        println!("Rendering {} samples", samples);
-        let scanlines = (0..height).into_par_iter().map(|y| {
-            let mut rng = rand::rng();
-            let mut pixels = vec![Vector3::new(0.0, 0.0, 0.0); width];
-            let v = y as f32 / height as f32;
-            for x in 0..width {
-                let u = x as f32 / width as f32;
-
-                for _ in 0..samples {
                     let ray = scene.camera.generate_ray(1.0 - u, 1.0 - v);
 
                     let result = Self::trace(&ray, scene, 4, &mut rng);
 
                     pixels[x] += result * (1.0 / samples as f32);
                 }
-            }
 
-            pixels
-        }).collect::<Vec<Vec<Vector3<f32>>>>();
+                pixels
+            })
+            .collect::<Vec<Vec<Vector3<f32>>>>();
 
         for y in 0..height {
             for x in 0..width {

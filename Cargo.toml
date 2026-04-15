@@ -11,3 +11,5 @@ rand = "0.9.1"
 rayon = "1.10.0"
 gltf = { version = "1.4.1", features = ["import", "KHR_materials_ior", "KHR_materials_transmission", "KHR_materials_emissive_strength", "KHR_texture_transform"] }
 clap = { version = "4.5.38", features = ["derive"] }
+winit = "0.30.13"
+pixels = "0.16.0"
