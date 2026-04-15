@@ -4,7 +4,7 @@ use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
 use crate::scene::ShadingContext;
 use crate::scene::scene::Scene;
-use nalgebra::Vector3;
+use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use rayon::iter::IntoParallelIterator;
 use rayon::prelude::*;
@@ -25,6 +25,7 @@ impl PathTracingIntegrator {
     ) -> Vector3<f32> {
         let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
         let v = hit.intersection.tex_coord.y.rem_euclid(1.0);
+        let tex_coords = Vector2::new(u, v);
         let emissive = hit.material.sample_emissive(u, v);
         let albedo = hit.material.sample_color(u, v);
         let hit_point = ray.origin() + ray.direction() * hit.intersection.dist;
@@ -49,7 +50,7 @@ impl PathTracingIntegrator {
                     let view_dir = -ray.direction().normalize();
                     let brdf =
                         hit.material
-                            .brdf(&light_dir, &view_dir, &hit.intersection.normal, &albedo);
+                            .brdf(&light_dir, &view_dir, &hit.intersection.normal, &albedo, tex_coords);
                     direct_light = (light_emissive * (cos_theta_light / (distance_sq * light_pdf)))
                         .component_mul(&brdf)
                         * cos_theta;
@@ -60,7 +61,7 @@ impl PathTracingIntegrator {
         // Indirect lighting: BSDF sampling for next bounce
         let sample =
             hit.material
-                .sample_bsdf(ray.direction(), hit.intersection.normal, albedo, rng);
+                .sample_bsdf(ray.direction(), hit.intersection.normal, albedo, tex_coords, rng);
 
         // Offset based on outgoing hemisphere relative to the geometric normal.
         // This works for reflection and for both entering/exiting transmission.
@@ -109,7 +110,7 @@ impl Integrator for PathTracingIntegrator {
         // TODO: Can this "threading boilerplate" be moved outside the integrator, so every dont have to do the same thing?
         let width = frame.width() as usize;
         let height = frame.height() as usize;
-        
+
         let scanlines = (0..height)
             .into_par_iter()
             .map(|y| {

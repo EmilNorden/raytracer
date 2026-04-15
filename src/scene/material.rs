@@ -1,8 +1,8 @@
 use std::f32::consts::PI;
-use nalgebra::Vector3;
+use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use crate::scene::coordinate_system::CoordinateSystem;
-use crate::scene::texture::Texture;
+use crate::scene::texture::{Channel, Texture};
 
 pub struct Material {
     /*
@@ -14,6 +14,7 @@ pub struct Material {
     texture: Option<Texture>,
     normal_map: Option<Texture>,
     emissive_texture: Option<Texture>,
+    metallic_roughness_texture: Option<Texture>,
     emissive: Vector3<f32>,
     roughness: f32,
     f0: Vector3<f32>,
@@ -44,12 +45,13 @@ pub struct BsdfSample {
 }
 
 impl Material {
-    pub fn new(color: Vector3<f32>, texture: Option<Texture>, normal_map: Option<Texture>, emissive_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32) -> Self {
+    pub fn new(color: Vector3<f32>, texture: Option<Texture>, normal_map: Option<Texture>, emissive_texture: Option<Texture>, metallic_roughness_texture: Option<Texture>, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32) -> Self {
         Self {
             color,
             texture,
             normal_map,
             emissive_texture,
+            metallic_roughness_texture,
             emissive,
             roughness,
             f0: Vector3::new(0.04, 0.04, 0.04),  // Standard dielectric F0
@@ -60,7 +62,10 @@ impl Material {
     }
 
     pub fn color(&self) -> Vector3<f32> { self.color }
-    pub fn roughness(&self) -> f32 { self.roughness }
+    pub fn roughness(&self, tex_coords: Vector2<f32>) -> f32 {
+        self.metallic_roughness_texture.as_ref().map(|t| t.sample_channel(tex_coords.x, tex_coords.y, Channel::G)).unwrap_or(self.roughness)
+    }
+
     pub fn emissive_factor(&self) -> Vector3<f32> { self.emissive }
     pub fn transmission_factor(&self) -> f32 { self.transmission_factor }
     pub fn ior(&self) -> f32 { self.ior }
@@ -167,7 +172,7 @@ impl Material {
     }
 
 
-    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, rng: &mut impl Rng) -> BsdfSample {
+    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, tex_coords: Vector2<f32>, rng: &mut impl Rng) -> BsdfSample {
         let n = normal;
         let v = (-incoming).normalize();
         let n_dot_v = n.dot(&v).max(0.0);
@@ -209,7 +214,7 @@ impl Material {
             };
         }
 
-        let alpha = self.alpha();
+        let alpha = self.alpha(tex_coords);
         let f0 = self.f0_from_albedo(&albedo);
         let specular_prob = self.specular_sampling_probability(&f0);
 
@@ -322,7 +327,7 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
     }
 
     // GGX BRDF
-    pub fn brdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>) -> Vector3<f32> {
+    pub fn brdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
         let half_vector = (light_dir + view_dir).normalize();
         let n_dot_l = normal.dot(&light_dir).max(0.0);
         let n_dot_v = normal.dot(&view_dir).max(0.0);
@@ -332,7 +337,7 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
             return Vector3::zeros();
         }
 
-        let alpha = self.alpha();
+        let alpha = self.alpha(tex_coords);
         let f0 = self.f0_from_albedo(albedo);
 
         let d = Self::ggx_ndf(n_dot_h, alpha);
@@ -344,8 +349,8 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         diffuse + specular
     }
 
-    fn alpha(&self) -> f32 {
-        let roughness = self.roughness.clamp(0.02, 1.0);
+    fn alpha(&self, tex_coords: Vector2<f32>) -> f32 {
+        let roughness = self.roughness(tex_coords).clamp(0.02, 1.0);
         (roughness * roughness).max(1e-4)
     }
 
@@ -382,7 +387,7 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
 
     // ----------------- 8< --------------
 
-   pub  fn sample(&self, incoming: Vector3<f32>, normal: Vector3<f32>, u: f32, v: f32, rng: &mut impl Rng) -> (Vector3<f32>, Vector3<f32>, f32, f32) {
+   /*pub  fn sample(&self, incoming: Vector3<f32>, normal: Vector3<f32>, u: f32, v: f32, rng: &mut impl Rng) -> (Vector3<f32>, Vector3<f32>, f32, f32) {
         let alpha = self.roughness * self.roughness;
        let albedo = self.sample_color(u, v);
 
@@ -431,7 +436,7 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         let pdf = d * n_dot_h / (4.0 * v_dot_h + 1e-5);
 
         (outgoing, brdf, pdf, n_dot_l)
-    }
+    }*/
 
     fn reflect(v: Vector3<f32>, n: Vector3<f32>) -> Vector3<f32> {
         v - 2.0 * v.dot(&n) * n
