@@ -123,6 +123,7 @@ impl Integrator for PathTracingIntegrator {
                     let u = x as f32 / width as f32;
 
                     let ray = scene.camera.generate_ray(1.0 - u, 1.0 - v);
+                    //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
 
                     let result = Self::trace(&ray, scene, 4, &mut rng);
 

@@ -1,4 +1,6 @@
+use std::f32::consts::PI;
 use nalgebra::{Point3, Vector2, Vector3};
+use rand::Rng;
 use crate::camera::viewpoint::Viewpoint;
 use crate::core::Ray;
 
@@ -57,5 +59,18 @@ impl Viewpoint for PerspectiveCamera {
     fn generate_ray(&self, u: f32, v: f32) -> Ray {
         let direction = self.view_plane.get_coordinates_from_uv(u, v) - self.origin;
         Ray::new(self.origin, direction.normalize())
+    }
+
+    fn generate_offset_ray(&self, u: f32, v: f32, radius: f32, focal_distance: f32, rng: &mut impl Rng) -> Ray {
+        let direction = self.view_plane.get_coordinates_from_uv(u, v) - self.origin;
+        let focal_point = self.origin + direction.normalize() * focal_distance;
+
+        let angle = rng.random::<f32>() * PI * 2.0;
+        let length = rng.random::<f32>() * radius;
+
+        let origin = self.origin + (self.view_plane.u_dir * angle.sin() * length) + (self.view_plane.v_dir * angle.cos() * length);
+        let direction = (focal_point - origin).normalize();
+
+        Ray::new(origin, direction)
     }
 }
