@@ -101,9 +101,24 @@ impl GltfLoader {
         Point3::new(transform[(0, 3)], transform[(1, 3)], transform[(2, 3)])
     }
 
+    fn find_camera_node<'a>(node: &Node<'a>) -> Option<Node<'a>> {
+        if node.camera().is_some() {
+            return Some(node.clone());
+        }
+        else {
+            for  child in node.children() {
+                if let Some(camera_node) = Self::find_camera_node(&child) {
+                    return Some(camera_node);
+                }
+            }
+        }
+
+        None
+    }
+
     fn create_camera(scene: &gltf::scene::Scene, options: &RenderOptions) -> anyhow::Result<PerspectiveCamera> {
         let camera_node = scene.nodes()
-            .find(|n| n.camera().is_some())
+            .find_map(|node| Self::find_camera_node(&node))
             .ok_or_else(|| SceneError::NoCameras)?;
 
         let cam = camera_node.camera().unwrap();
@@ -191,7 +206,6 @@ impl GltfLoader {
         let mut meshes = Vec::new();
 
         for primitive in mesh.primitives() {
-            let mut triangles = Vec::new();
             if primitive.mode() != Mode::Triangles {
                 return Err(SceneError::UnsupportedFormat("Only triangles are supported".to_string()).into());
             }
@@ -231,7 +245,22 @@ impl GltfLoader {
 
             let tangents = tangents.unwrap_or_else(|| Self::build_fallback_tangents(&positions, &normals, &tex_coords, &indices));
 
+            let mut vertices = Vec::new();
+            let mut tri_indices = Vec::new();
 
+            for i in 0..positions.len() {
+                let position = positions[i];
+                let normal = normals[i];
+                let tex_coord = tex_coords[i];
+                let tangent = tangents[i];
+
+                vertices.push(Vertex {
+                    position,
+                    normal,
+                    tangent,
+                    uv: tex_coord,
+                });
+            }
             for i in (0..indices.len()).step_by(3) {
                 let i0 = indices[i];
                 let i1 = indices[i + 1];
@@ -253,31 +282,10 @@ impl GltfLoader {
                 let tangent1 = tangents[i1 as usize];
                 let tangent2 = tangents[i2 as usize];
 
-                let vertex0 = Vertex {
-                    position: pos0,
-                    normal: normal0,
-                    tangent: tangent0,
-                    uv: tex_coord0,
-                };
-
-                let vertex1 = Vertex {
-                    position: pos1,
-                    normal: normal1,
-                    tangent: tangent1,
-                    uv: tex_coord1,
-                };
-
-                let vertex2 = Vertex {
-                    position: pos2,
-                    normal: normal2,
-                    tangent: tangent2,
-                    uv: tex_coord2,
-                };
-
-                triangles.push(Triangle::new([vertex0, vertex1, vertex2]));
+                tri_indices.push([i0, i1, i2]);
             }
 
-            meshes.push(Arc::new(MeshData::new(triangles, material)));
+            meshes.push(Arc::new(MeshData::new(vertices, tri_indices, material)));
         }
 
         Ok(meshes)

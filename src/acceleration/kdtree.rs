@@ -1,6 +1,6 @@
 use nalgebra::{Point3, Vector3};
 use crate::acceleration::bounds::AABB;
-use crate::content::triangle::{Triangle, TriangleIntersection};
+use crate::content::triangle::{Triangle, TriangleIntersection, IntersectTriangle, Vertex};
 use crate::core::Ray;
 use crate::static_stack::StaticStack;
 
@@ -41,18 +41,43 @@ pub struct KDTree {
     bounds: AABB,
 }
 
+// Triangle struct used during KD build phase
+#[derive(Clone, Copy, Debug)]
+struct BuildTriangle {
+    pub tri_index: usize,
+    pub v0: Point3<f32>,
+    pub v1: Point3<f32>,
+    pub v2: Point3<f32>,
+}
+
 impl KDTree {
     const MAX_BUILD_DEPTH: usize = 64;
     const MIN_LEAF_TRIANGLE_COUNT: usize = 128;
 
-    pub fn new(items: Vec<Triangle>) -> Self {
-       let mut bounds = AABB::from_points(items.iter()
-           .flat_map(|x| [x.v0().position, x.v1().position, x.v2().position]));
+    pub fn new(vertices: &[Vertex], tri_indices: &[[u32; 3]]) -> Self {
+       let mut bounds = AABB::from_points(vertices.iter().map(|x| x.position));
+           /*AABB::from_points(items.iter()
+           .flat_map(|x| [x.v0().position, x.v1().position, x.v2().position]));*/
 
+        //let items: Vec<(usize, Triangle)> = items.iter().enumerate().map(|(i, x)| (i, x.clone())).collect();
+        let triangles: Vec<BuildTriangle> = tri_indices
+            .iter()
+            .enumerate()
+            .map(|(i, x)| {
+                let v0 = vertices[x[0] as usize].position;
+                let v1 = vertices[x[1] as usize].position;
+                let v2 = vertices[x[2] as usize].position;
+                BuildTriangle {
+                    tri_index: i,
+                    v0,
+                    v1,
+                    v2,
+                }
+            }).collect();
         bounds.inflate(0.001);
         bounds.ensure_minimum_dimensions(0.001);
         Self {
-            root: TreeNode::build_node(items, Axis::X, 0),
+            root: TreeNode::build_node(triangles, Axis::X, 0),
             bounds,
         }
     }
@@ -71,7 +96,7 @@ impl KDTree {
         self.triangle_count_from_node(&self.root)
     }
 
-    pub fn intersects(&self, ray: &Ray) -> Option<TriangleIntersection> {
+    pub fn intersects(&self, ray: &Ray, triangle_edges: &[IntersectTriangle], ) -> Option<(usize, TriangleIntersection)> {
 
         let (global_tmin, global_tmax) = if let Some(hit) = self.bounds.intersect(ray) {
             (hit.tmin, hit.tmax)
@@ -104,9 +129,9 @@ impl KDTree {
                 println!("Oh no something is wrong");
             }
 
-            if let Some(hit) = Self::intersects_mesh(self, ray, node, tmax.min(closest_hit_dist)) {
-                if hit.dist < closest_hit_dist {
-                    closest_hit_dist = hit.dist;
+            if let Some(hit) = Self::intersects_mesh(self, ray, node, triangle_edges, tmax.min(closest_hit_dist)) {
+                if hit.1.dist < closest_hit_dist {
+                    closest_hit_dist = hit.1.dist;
                     closest_hit = Some(hit);
                 }
             }
@@ -133,15 +158,16 @@ impl KDTree {
         closest_hit
     }
 
-    fn intersects_mesh(&self, ray: &Ray, node: &TreeNode, tmax: f32) -> Option<TriangleIntersection> {
+    fn intersects_mesh(&self, ray: &Ray, node: &TreeNode, triangle_edges: &[IntersectTriangle], tmax: f32) -> Option<(usize, TriangleIntersection)> {
         let mut closest_hit = None;
         let mut closest_hit_dist = tmax;
 
         for item in &node.items {
-            if let Some(hit) = item.intersect(ray) {
+            let tri = &triangle_edges[*item as usize];
+            if let Some(hit) = tri.intersect(ray) {
                 if hit.dist < closest_hit_dist {
                     closest_hit_dist = hit.dist;
-                    closest_hit = Some(hit);
+                    closest_hit = Some((*item as usize, hit));
                 }
             }
         }
@@ -182,7 +208,7 @@ struct TreeNode {
     splitting_value: f32,
     left: Option<Box<TreeNode>>,
     right: Option<Box<TreeNode>>,
-    items: Vec<Triangle>,
+    items: Vec<u32>,
 }
 
 impl TreeNode
@@ -191,35 +217,35 @@ impl TreeNode
         self.left.is_none() && self.right.is_none()
     }
 
-    fn make_leaf(items: Vec<Triangle>, splitting_axis: Axis) -> TreeNode {
+    fn make_leaf(triangles: Vec<BuildTriangle>, splitting_axis: Axis) -> TreeNode {
         TreeNode {
             splitting_axis,
             splitting_value: 0.0,
             left: None,
             right: None,
-            items,
+            items: triangles.into_iter().map(|x| x.tri_index as u32).collect()
         }
     }
 
-    pub fn build_node(mut items: Vec<Triangle>, fallback_axis: Axis, depth: usize) -> TreeNode {
-        if items.len() < KDTree::MIN_LEAF_TRIANGLE_COUNT || depth >= KDTree::MAX_BUILD_DEPTH {
-            return Self::make_leaf(items, fallback_axis);
+    pub fn build_node(mut triangles: Vec<BuildTriangle>, fallback_axis: Axis, depth: usize) -> TreeNode {
+        if triangles.len() < KDTree::MIN_LEAF_TRIANGLE_COUNT || depth >= KDTree::MAX_BUILD_DEPTH {
+            return Self::make_leaf(triangles, fallback_axis);
         }
 
-        let splitting_axis = Self::choose_split_axis(&items, fallback_axis);
+        let splitting_axis = Self::choose_split_axis(&triangles, fallback_axis);
 
-        items.sort_by(|a, b| {
+        triangles.sort_by(|a, b| {
             // Sort each face by comparing the center of the triangles.
             // Previously I used the first vertex of each face but that didnt work out well.
 
-            let a_mid_point = Self::get_triangle_center(&a.v0().position, &a.v1().position, &a.v2().position);
-            let b_mid_point = Self::get_triangle_center(&b.v0().position, &b.v1().position, &b.v2().position);
+            let a_mid_point = Self::get_triangle_center(&a.v0, &a.v1, &a.v2);
+            let b_mid_point = Self::get_triangle_center(&b.v0, &b.v1, &b.v2);
 
             a_mid_point[splitting_axis.as_index()].total_cmp(&b_mid_point[splitting_axis.as_index()])
         });
 
-        let half_size = items.len() / 2;
-        let median_point = Self::get_triangle_center(&items[half_size].v0().position, &items[half_size].v1().position, &items[half_size].v2().position);
+        let half_size = triangles.len() / 2;
+        let median_point = Self::get_triangle_center(&triangles[half_size].v0, &triangles[half_size].v1, &triangles[half_size].v2);
         let splitting_value = median_point[splitting_axis.as_index()];
 
         let mut left_side = Vec::with_capacity(half_size);
@@ -228,21 +254,21 @@ impl TreeNode
 
         let axis = splitting_axis.as_index();
 
-        for item in items {
-            let v0 = item.v0().position;
-            let v1 = item.v1().position;
-            let v2 = item.v2().position;
+        for tri in triangles {
+            let v0 = tri.v0;
+            let v1 = tri.v1;
+            let v2 = tri.v2;
 
             let tri_min = v0[axis].min(v1[axis].min(v2[axis]));
             let tri_max = v0[axis].max(v1[axis].max(v2[axis]));
 
             if tri_max < splitting_value {
-                left_side.push(item);
+                left_side.push(tri);
             } else if tri_min >= splitting_value {
-                right_side.push(item);
+                right_side.push(tri);
             } else {
                 // Keep straddling triangles in the current node to guarantee child recursion shrinks.
-                local_items.push(item);
+                local_items.push(tri);
             }
         }
 
@@ -258,16 +284,16 @@ impl TreeNode
             splitting_value,
             left: Some(Box::new(Self::build_node(left_side, splitting_axis, depth + 1))),
             right: Some(Box::new(Self::build_node(right_side, splitting_axis, depth + 1))),
-            items: local_items,
+            items: local_items.into_iter().map(|x| x.tri_index as u32).collect()
         }
     }
 
-    fn choose_split_axis(items: &[Triangle], fallback_axis: Axis) -> Axis {
+    fn choose_split_axis(triangles: &[BuildTriangle], fallback_axis: Axis) -> Axis {
         let mut min_point = Point3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY);
         let mut max_point = Point3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
 
-        for item in items {
-            let center = Self::get_triangle_center(&item.v0().position, &item.v1().position, &item.v2().position);
+        for tri in triangles {
+            let center = Self::get_triangle_center(&tri.v0, &tri.v1, &tri.v2);
             for axis in 0..3 {
                 min_point[axis] = min_point[axis].min(center[axis]);
                 max_point[axis] = max_point[axis].max(center[axis]);

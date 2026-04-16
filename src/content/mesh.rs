@@ -2,56 +2,76 @@ use std::sync::Arc;
 use nalgebra::{Point3, Vector2, Vector3, Vector4};
 use crate::acceleration::bounds::AABB;
 use crate::acceleration::kdtree::KDTree;
-use crate::content::triangle::{Triangle, Vertex};
+use crate::content::triangle::{Triangle, IntersectTriangle, Vertex};
 use crate::core::Ray;
 use crate::scene::{Intersectable, Intersection, Shadeable};
 use crate::scene::material::Material;
 
 pub struct MeshData {
-    //bounds: AABB,
-    triangles: Vec<Triangle>,
-    geometry: KDTree,
+    intersect_triangles: Vec<IntersectTriangle>,
+    vertices: Vec<Vertex>,
+    tri_indices: Vec<[u32; 3]>,
+    kd_tree: KDTree,
     material: Material,
 }
 
 
 impl MeshData {
-    pub fn new<I: IntoIterator<Item = Triangle>>(triangle_iter: I, material: Material) -> Self {
-        let triangles: Vec<Triangle> = triangle_iter.into_iter().collect();
+    pub fn new(vertices: Vec<Vertex>, tri_indices: Vec<[u32; 3]>, material: Material) -> Self
+    where
+    {
+        let intersect_triangles = tri_indices.iter().map(|tri_indices| {
+            let i0 = tri_indices[0] as usize;
+            let i1 = tri_indices[1] as usize;
+            let i2 = tri_indices[2] as usize;
+            let v0 = vertices[i0].position;
+            let edge1 = vertices[i1].position - v0;
+            let edge2 = vertices[i2].position - v0;
+            IntersectTriangle { v0 , edge1, edge2 }
+        }).collect();
+
+        let kd_tree = KDTree::new(&vertices, &tri_indices);
 
         Self {
-            triangles: triangles.clone(),
-            geometry: KDTree::new(triangles),
+            intersect_triangles: intersect_triangles,
+            vertices,
+            tri_indices,
+            kd_tree,
             material
         }
     }
 
     fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Intersection> {
-        let closest_intersection = self.geometry.intersects(ray);
+        let closest_intersection = self.kd_tree.intersects(ray, &self.intersect_triangles);
 
-        closest_intersection.and_then(|x| {
+        closest_intersection.and_then(|(tri_index, x)| {
             if x.dist < t_min || x.dist > t_max {
                 return None;
             }
 
+            let triangle = &self.tri_indices[tri_index];
+            let v0 = &self.vertices[triangle[0] as usize];
+            let v1 = &self.vertices[triangle[1] as usize];
+            let v2 = &self.vertices[triangle[2] as usize];
+
             // TODO: Should I only return the barycentric UV coordinates and the triangle, and only interpolate these parameters once I have found the true intersection?
-            let tex_coord0 = x.triangle.v0().uv;
-            let tex_coord1 = x.triangle.v1().uv;
-            let tex_coord2 = x.triangle.v2().uv;
+            let tex_coord0 = v0.uv;
+            let tex_coord1 = v1.uv;
+            let tex_coord2 = v2.uv;
 
             let w = 1.0 - x.barycentric.x - x.barycentric.y;
 
             let tex_coord = tex_coord0 * w + tex_coord1 * x.barycentric.x + tex_coord2 * x.barycentric.y;
 
-            let normal0 = x.triangle.v0().normal;
-            let normal1 = x.triangle.v1().normal;
-            let normal2 = x.triangle.v2().normal;
+            let normal0 = v0.normal;
+            let normal1 = v1.normal;
+            let normal2 = v2.normal;
 
             let normal = normal0 * w + normal1 * x.barycentric.x + normal2 * x.barycentric.y;
 
-            let tangent0 = x.triangle.v0().tangent;
-            let tangent1 = x.triangle.v1().tangent;
-            let tangent2 = x.triangle.v2().tangent;
+            let tangent0 = v0.tangent;
+            let tangent1 = v1.tangent;
+            let tangent2 = v2.tangent;
 
             let tangent = tangent0 * w + tangent1 * x.barycentric.x + tangent2 * x.barycentric.y;
 
@@ -69,7 +89,7 @@ impl MeshData {
     }*/
 
     pub fn bounds(&self) -> AABB {
-        self.geometry.bounds()
+        self.kd_tree.bounds()
     }
 }
 
@@ -129,11 +149,16 @@ impl MeshInstance {
     }
     
     pub fn triangle_count(&self) -> usize {
-        self.data.triangles.len()
+        self.data.tri_indices.len()
     }
 
     pub fn triangle_at(&self, index: usize) -> Triangle {
-        let triangle = self.data.triangles.get(index).unwrap();
+        let triangle = self.data.tri_indices.get(index).unwrap();
+        let v0 = self.data.vertices.get(triangle[0] as usize).unwrap();
+        let v1 = self.data.vertices.get(triangle[1] as usize).unwrap();
+        let v2 = self.data.vertices.get(triangle[2] as usize).unwrap();
+
+        let triangle = Triangle::new([v0.clone(), v1.clone(), v2.clone()]);
         triangle.transform(&self.transform)
     }
 }
