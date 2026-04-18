@@ -5,6 +5,7 @@ use crate::content::mesh::MeshInstance;
 use crate::core::Ray;
 use crate::scene::{Intersectable, Shadeable, ShadingContext};
 use crate::scene::light::{LightSource, PointLight};
+use crate::scene::node_graph::NodeGraph;
 
 pub struct SceneNode {
     pub transform: Matrix4<f32>,
@@ -12,31 +13,35 @@ pub struct SceneNode {
     pub children: Vec<SceneNode>,
 }
 pub struct Scene {
-    pub camera: PerspectiveCamera, // TODO: Replace with camera trait
+    node_graph: NodeGraph,
+    cameras : Vec<PerspectiveCamera>,
     meshes: Vec<MeshInstance>,
     bvh: BVH,
     lights: Vec<LightSource>,
 }
 
 impl Scene {
-    pub fn new(camera: PerspectiveCamera, mut meshes: Vec<MeshInstance>, mut point_lights: Vec<PointLight>) -> Self {
-        let mut lights = Vec::new();
+    pub fn new(node_graph: NodeGraph, cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, mut lights: Vec<LightSource>) -> Self {
         for mesh in &meshes {
             if mesh.material().emissive_factor() != Vector3::zeros() {
                 lights.push(LightSource::Mesh(mesh.clone()));
             }
         }
-        lights.append(&mut point_lights.into_iter().map(LightSource::Point).collect());
 
         let bvh = BVH::new(&mut meshes);
 
 
         Self {
-            camera,
+            node_graph,
+            cameras,
             meshes,
             bvh,
             lights,
         }
+    }
+
+    pub fn active_camera(&self) -> &PerspectiveCamera {
+        &self.cameras[0]
     }
 
     pub fn intersect(&self, ray: &Ray) -> Option<ShadingContext> {

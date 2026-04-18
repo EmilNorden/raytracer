@@ -2,7 +2,7 @@
 use gltf::khr_lights_punctual::Kind;
 use std::path::Path;
 use gltf::camera::Projection;
-use nalgebra::{Matrix4, Point3, Vector2, Vector3, Vector4};
+use nalgebra::{Matrix4, Point3, Quaternion, UnitQuaternion, Vector2, Vector3, Vector4};
 use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::scene_loader::{SceneError, SceneLoader};
 use crate::scene::scene::Scene;
@@ -15,8 +15,9 @@ use crate::content::gltf::material::create_material;
 use crate::content::mesh::{MeshInstance, MeshData};
 use crate::content::triangle::{Triangle, Vertex};
 use crate::options::RenderOptions;
-use crate::scene::light::PointLight;
+use crate::scene::light::{LightSource, PointLight};
 use crate::scene::material::Material;
+use crate::scene::node_graph::{NodeGraph, NodeTransform, SceneNode};
 
 pub struct GltfLoader{}
 
@@ -101,108 +102,7 @@ impl GltfLoader {
         Point3::new(transform[(0, 3)], transform[(1, 3)], transform[(2, 3)])
     }
 
-    fn find_camera_node<'a>(node: &Node<'a>) -> Option<Node<'a>> {
-        if node.camera().is_some() {
-            return Some(node.clone());
-        }
-        else {
-            for  child in node.children() {
-                if let Some(camera_node) = Self::find_camera_node(&child) {
-                    return Some(camera_node);
-                }
-            }
-        }
-
-        None
-    }
-
-    fn create_camera(scene: &gltf::scene::Scene, options: &RenderOptions) -> anyhow::Result<PerspectiveCamera> {
-        let camera_node = scene.nodes()
-            .find_map(|node| Self::find_camera_node(&node))
-            .ok_or_else(|| SceneError::NoCameras)?;
-
-        let cam = camera_node.camera().unwrap();
-        let projection = cam.projection();
-
-        let perspective = match projection {
-            Projection::Orthographic(_) =>
-                return Err(SceneError::UnsupportedFormat("Orthographic projection not supported".to_string()).into()),
-            Projection::Perspective(x) => x
-        };
-
-        let camera_transform = Matrix4::from(camera_node.transform().matrix());
-        let (_, up, forward) = Self::extract_directions(&camera_transform);
-        let origin = Self::extract_translation(&camera_transform);
-
-        let aspect_ratio = options.width as f32 / options.height as f32;
-
-        Ok(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov()))
-    }
-
-    fn create_meshes_in_children(parent: &Node, current_transform: Matrix4<f32>, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<MeshInstance>> {
-        let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
-
-        let child_transform = current_transform * Matrix4::from(parent.transform().matrix());
-
-        let mut meshes = Vec::new();
-
-        for node in parent.children() {
-            if let Some(mesh) = node.mesh() {
-                let mesh_data = if mesh_data_map[mesh.index()].is_some() {
-                    mesh_data_map[mesh.index()].clone().unwrap()
-                } else {
-                    let data = Self::create_mesh_data(&buffers, &mesh, total_material_count, folder)?;
-                    mesh_data_map[mesh.index()] = Some(data.clone());
-                    data
-                };
-
-                let transform = child_transform * Matrix4::from(node.transform().matrix());
-
-                for data in mesh_data {
-                    meshes.push(MeshInstance::new(mesh.index(), data, Self::extract_translation(&transform), transform));
-                }
-            }
-
-            meshes.append(&mut Self::create_meshes_in_children(&node, child_transform, buffers, total_mesh_count, total_material_count, folder)?);
-        }
-
-
-
-        Ok(meshes)
-    }
-
-    fn create_meshes(scene: &gltf::scene::Scene, buffers: &Vec<Data>, total_mesh_count: usize, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<MeshInstance>> {
-        let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
-
-        let mut meshes = Vec::new();
-
-        for node in scene.nodes() {
-            if let Some(mesh) = node.mesh() {
-                let mesh_data = if mesh_data_map[mesh.index()].is_some() {
-                    mesh_data_map[mesh.index()].clone().unwrap()
-                } else {
-                    let data = Self::create_mesh_data(&buffers, &mesh, total_material_count, folder)?;
-                    mesh_data_map[mesh.index()] = Some(data.clone());
-                    data
-                };
-
-                let transform = Matrix4::from(node.transform().matrix());
-
-                for data in mesh_data {
-                    meshes.push(MeshInstance::new(mesh.index(), data, Self::extract_translation(&transform), transform));
-                }
-            }
-
-            meshes.append(&mut Self::create_meshes_in_children(&node, Matrix4::identity(), buffers, total_mesh_count, total_material_count, folder)?);
-        }
-
-
-        Ok(meshes)
-    }
-
-    fn create_mesh_data(buffers: &Vec<Data>, mesh: &gltf::mesh::Mesh, total_material_count: usize, folder: &Path) -> anyhow::Result<Vec<Arc<MeshData>>> {
-        let mut material_map : Vec<Option<Arc<Material>>> = vec![None; total_material_count];
-
+    fn create_mesh_data(buffers: &Vec<Data>, mesh: &gltf::mesh::Mesh, material_map: &mut Vec<Option<Arc<Material>>>, folder: &Path) -> anyhow::Result<Vec<Arc<MeshData>>> {
         let mut meshes = Vec::new();
 
         for primitive in mesh.primitives() {
@@ -266,22 +166,6 @@ impl GltfLoader {
                 let i1 = indices[i + 1];
                 let i2 = indices[i + 2];
 
-                let pos0 = positions[i0 as usize];
-                let pos1 = positions[i1 as usize];
-                let pos2 = positions[i2 as usize];
-
-                let normal0 = normals[i0 as usize];
-                let normal1 = normals[i1 as usize];
-                let normal2 = normals[i2 as usize];
-
-                let tex_coord0 = tex_coords[i0 as usize];
-                let tex_coord1 = tex_coords[i1 as usize];
-                let tex_coord2 = tex_coords[i2 as usize];
-
-                let tangent0 = tangents[i0 as usize];
-                let tangent1 = tangents[i1 as usize];
-                let tangent2 = tangents[i2 as usize];
-
                 tri_indices.push([i0, i1, i2]);
             }
 
@@ -291,25 +175,93 @@ impl GltfLoader {
         Ok(meshes)
     }
 
-    fn create_point_lights(scene: &gltf::scene::Scene) -> Vec<PointLight> {
-        let mut lights = Vec::new();
-        for node in scene.nodes() {
-            if let Some(light) = node.light() {
-                match light.kind() {
-                    Kind::Point => {
-                        let transform = Matrix4::from(node.transform().matrix());
-                        let position = Self::extract_translation(&transform);
-                        let intensity = light.intensity();
+    fn create_scene_node(node: &Node, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, mesh_data_map: &mut Vec<Option<Vec<Arc<MeshData>>>>, material_data_map: &mut Vec<Option<Arc<Material>>>, folder: &Path, parent_transform: &Matrix4<f32>) -> anyhow::Result<SceneNode> {
+        let transform = parent_transform * Matrix4::from(node.transform().matrix());
+        let children = node.children().map(|child|{
+            Self::create_scene_node(&child, buffers, cameras, lights, meshes, mesh_data_map, material_data_map, folder, &transform)
+        }).collect::<anyhow::Result<Vec<SceneNode>>>()?;
 
-                        let color = light.color();
-                        lights.push(PointLight::new(position, Vector3::new(color[0], color[1], color[2]), intensity, 1.0))
-                    }
-                    _ => {}
-                }
+        let mut mesh_indices = Vec::new();
+        if let Some(mesh) = node.mesh() {
+            let mesh_data = if mesh_data_map[mesh.index()].is_some() {
+                mesh_data_map[mesh.index()].clone().unwrap()
+            } else {
+                let data = Self::create_mesh_data(&buffers, &mesh, material_data_map, folder)?;
+                mesh_data_map[mesh.index()] = Some(data.clone());
+                data
+            };
+
+            for data in mesh_data {
+                mesh_indices.push(meshes.len());
+                meshes.push(MeshInstance::new(mesh.index(), data, Self::extract_translation(&transform), transform));
             }
         }
 
-        lights
+        let mut light_index = None;
+        if let Some(light) = node.light() {
+            match light.kind() {
+                Kind::Point => {
+                    let transform = Matrix4::from(node.transform().matrix());
+                    let position = Self::extract_translation(&transform);
+                    let intensity = light.intensity();
+
+                    let color = light.color();
+                    light_index = Some(lights.len());
+                    lights.push(LightSource::Point(PointLight::new(position, Vector3::new(color[0], color[1], color[2]), intensity, 1.0)))
+                }
+                _ => {}
+            }
+        }
+
+        let mut camera_index = None;
+        if let Some(camera) = node.camera() {
+
+            let projection = camera.projection();
+
+            let perspective = match projection {
+                Projection::Orthographic(_) =>
+                    return Err(SceneError::UnsupportedFormat("Orthographic projection not supported".to_string()).into()),
+                Projection::Perspective(x) => x
+            };
+
+            let camera_transform = Matrix4::from(node.transform().matrix());
+            let (_, up, forward) = Self::extract_directions(&camera_transform);
+            let origin = Self::extract_translation(&camera_transform);
+
+            //let aspect_ratio = options.width as f32 / options.height as f32;
+            let aspect_ratio = 800.0 / 600.0; // TODO: Pass this in properly instead of hardcoding.
+
+            camera_index = Some(cameras.len());
+            cameras.push(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov()))
+        }
+
+        let (translation, rotation, scale) = node.transform().decomposed();
+
+        Ok(SceneNode {
+            index: node.index(),
+            name: node.name().map(|name| name.to_string()),
+            local_transform: NodeTransform::new(
+                Vector3::new(translation[0], translation[1], translation[2]),
+                UnitQuaternion::from_quaternion(Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2])),
+                Vector3::new(scale[0], scale[1], scale[2]),
+            ),
+            mesh_indices,
+            camera_index,
+            light_index,
+            children,
+        })
+    }
+
+
+    fn load_node_graph(scene: &gltf::scene::Scene, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, folder: &Path, total_mesh_count: usize, total_material_count: usize) -> anyhow::Result<NodeGraph> {
+        let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
+        let mut material_map : Vec<Option<Arc<Material>>> = vec![None; total_material_count];
+
+        let nodes = scene.nodes().map(|node|{
+            Self::create_scene_node(&node, buffers, cameras, lights, meshes, &mut mesh_data_map, &mut material_map, folder, &Matrix4::identity())
+        }).collect::<anyhow::Result<Vec<SceneNode>>>()?;
+
+        Ok(NodeGraph::new(nodes))
     }
 }
 impl SceneLoader for GltfLoader {
@@ -321,44 +273,15 @@ impl SceneLoader for GltfLoader {
         let (document, buffers , images) = gltf::import(path)?;
 
         if let Some(scene) = document.default_scene() {
+            let mut cameras = Vec::new();
+            let mut lights = Vec::new();
+            let mut meshes = Vec::new();
+            let node_graph = Self::load_node_graph(&scene, &buffers, &mut cameras, &mut lights, &mut meshes, parent_folder, document.meshes().len(), document.materials().len())?;
 
-            println!("Setting up camera..");;
-            let camera = Self::create_camera(&scene, options)?;
+            println!("Loaded scene with {} meshes, {} cameras, {} lights", meshes.len(), cameras.len(), lights.len());
 
-            println!("Processing meshes..");
-            let meshes = Self::create_meshes(&scene, &buffers, document.meshes().len(), document.materials().len(), parent_folder)?;
-
-            let lights = Self::create_point_lights(&scene);
-            let triangles: usize = meshes.iter().map(|x| x.triangle_count()).sum();
-            println!("Loaded {} meshes with {} triangles", meshes.len(), triangles);
-
-
-
-            Ok(Scene::new(camera, meshes, lights))
+            Ok(Scene::new(node_graph, cameras, meshes, lights))
         }
         else { Err(SceneError::NoDefaultScene.into()) }
     }
 }
-
-/*
-fn traverse_nodes(nodes: Nodes) {
-    for n in nodes {
-        println!("node: {:?}", n.name().unwrap_or_default());
-        if let Some(camera) = n.camera() {
-            println!("camera: {:?}", camera.name().unwrap_or_default());
-        }
-
-        traverse_children(n.children(), 0);
-    }
-}
-
-fn traverse_children(children: Children, indent: usize) {
-    for c in children {
-        for i in 0..indent {
-            print!("-");
-        }
-        println!("child: {:?}", c.name().unwrap_or_default());
-
-        traverse_children(c.children(), indent + 1);
-    }
-}*/

@@ -26,7 +26,7 @@ impl Integrator for DebugIntegrator {
             for x in 0..width {
                 let u = x as f32 / width as f32;
 
-                    let ray = scene.camera.generate_ray(1.0 - u, 1.0 - v);
+                    let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
 
                     if let Some(hit) = scene.intersect(&ray) {
                         let u = hit.intersection.tex_coord.x.rem_euclid(1.0);

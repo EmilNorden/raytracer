@@ -10,6 +10,7 @@ mod transform;
 pub mod texture;
 mod coordinate_system;
 pub mod light;
+pub mod node_graph;
 
 pub struct Intersection {
     pub dist: f32,
