@@ -10,7 +10,7 @@ use winit::window::{Window, WindowId};
 use crate::content::gltf::loader::GltfLoader;
 use crate::content::scene_loader::SceneLoader;
 use crate::frame::Frame;
-use crate::options::RenderOptions;
+use crate::options::{RenderOptions};
 use crate::integrator::integrator::{Integrator, IntegratorImpl};
 use crate::scene::scene::Scene;
 
@@ -33,6 +33,7 @@ struct App {
     pixels: Option<Pixels<'static>>,
     current_sample: u32,
     render_start: Instant,
+    frame_index: u32,
 }
 
 impl App {
@@ -69,7 +70,9 @@ impl App {
             if let Some(window) = self.window.as_ref() {
                 window.set_title("Pathtracer - done");
             }
-            self.frame.save(&self.options.output_file);
+            let path = std::path::Path::new(&self.options.output_folder).join(format!("out{}.png", self.frame_index));
+            self.frame.save(path);
+            self.frame_index += 1;
             return;
         }
 
@@ -83,11 +86,11 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = Arc::new(event_loop.create_window(Window::default_attributes()
             .with_title("Pathtracer")
-            .with_inner_size(Size::Logical(LogicalSize::new(self.options.width as f64,
-                                                              self.options.height as f64)))).unwrap());
+            .with_inner_size(Size::Logical(LogicalSize::new(self.options.resolution.width as f64,
+                                                              self.options.resolution.height as f64)))).unwrap());
 
-        let surface = SurfaceTexture::new(self.options.width, self.options.height, window.clone());
-        let pixels = Pixels::new(self.options.width, self.options.height, surface)
+        let surface = SurfaceTexture::new(self.options.resolution.width, self.options.resolution.height, window.clone());
+        let pixels = Pixels::new(self.options.resolution.width, self.options.resolution.height, surface)
             .expect("Failed to create pixel surface");
 
         window.request_redraw();
@@ -129,9 +132,15 @@ impl ApplicationHandler for App {
     }
 }
 
-fn main() {
-    let options = RenderOptions::parse();
+fn read_options() -> anyhow::Result<RenderOptions> {
+    let launch_file: RenderOptions = ron::de::from_reader( std::fs::File::open("launch.ron")?)?;
 
+    Ok(launch_file)
+}
+
+fn main() {
+    let options = read_options().unwrap();
+    println!("Using the following options:\n{}", options);
     let scene = GltfLoader::load_scene(&options.scene_file, &options).unwrap();
 
     if scene.lights().is_empty() {
@@ -139,7 +148,7 @@ fn main() {
         return;
     }
 
-    let frame = Frame::new(options.width, options.height);
+    let frame = Frame::new(options.resolution.width, options.resolution.height);
 
     let integrator = integrator::integrator::create(&options);
 
@@ -154,6 +163,7 @@ fn main() {
         pixels: None,
         current_sample: 0,
         render_start: Instant::now(),
+        frame_index: 0,
     };
 
     event_loop.run_app(&mut app).expect("TODO: panic message");

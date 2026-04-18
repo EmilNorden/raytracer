@@ -1,0 +1,13 @@
+RenderOptions(
+    scene_file: "/Users/emilnorden/models/alley/alley.gltf",
+    output_folder: "output",
+    resolution: Resolution(
+        width: 800,
+        height: 600,
+    ),
+    samples: 200,
+    debug: false,
+    max_bounces: 4,
+    video: true,
+    frame_rate: 30,
+)
