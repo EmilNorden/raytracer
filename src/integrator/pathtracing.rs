@@ -2,11 +2,10 @@ use crate::camera::viewpoint::Viewpoint;
 use crate::core::Ray;
 use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
-use crate::scene::ShadingContext;
 use crate::scene::scene::Scene;
+use crate::scene::ShadingContext;
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
-use rayon::iter::IntoParallelIterator;
 use rayon::prelude::*;
 
 pub struct PathTracingIntegrator {}
@@ -121,9 +120,7 @@ impl Integrator for PathTracingIntegrator {
         // TODO: Can this "threading boilerplate" be moved outside the integrator, so every dont have to do the same thing?
         let width = frame.width() as usize;
         let height = frame.height() as usize;
-
-        //let mut flat_buffer = vec![Vector3::new(0.0, 0.0, 0.0); width * height];
-
+        
         let height_inv = 1.0 / height as f32;
         let width_inv = 1.0 / width as f32;
         let samples_inv = 1.0 / samples as f32;
@@ -143,32 +140,5 @@ impl Integrator for PathTracingIntegrator {
             }
 
         });
-/*
-        let scanlines = (0..height)
-            .into_par_iter()
-            .map(|y| {
-                let mut rng = rand::rng();
-                let mut pixels = vec![Vector3::new(0.0, 0.0, 0.0); width];
-                let v = y as f32 / height as f32;
-                for x in 0..width {
-                    let u = x as f32 / width as f32;
-
-                    let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
-                    //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
-
-                    let result = Self::trace(&ray, scene, 4, &mut rng);
-
-                    pixels[x] += result * (1.0 / samples as f32);
-                }
-
-                pixels
-            })
-            .collect::<Vec<Vec<Vector3<f32>>>>();
-
-        for y in 0..height {
-            for x in 0..width {
-                frame.add_sample(x, y, scanlines[y][x])
-            }
-        }*/
     }
 }
