@@ -73,22 +73,31 @@ impl PathTracingIntegrator {
         } else {
             -1.0
         };
-        let indirect_origin = hit_point + n * (0.001 * offset_sign);
 
-        let new_ray = Ray::new(indirect_origin, sample.direction);
-        let indirect_light = Self::trace(&new_ray, scene, depth - 1, rng);
-
-        // Apply importance sampling: divide by PDF
         let cos_theta = if sample.is_transmission {
             sample.direction.dot(&n).abs()
         } else {
             sample.direction.dot(&n).max(0.0)
         };
-        let weighted_contribution = if sample.pdf > 1e-5 {
-            (indirect_light.component_mul(&sample.bsdf_value) * cos_theta) / sample.pdf
+
+        const MIN_PDF: f32 = 1e-5;
+
+        let weighted_contribution = if sample.pdf > MIN_PDF || cos_theta > 0.0 {
+            let indirect_origin = hit_point + n * (0.001 * offset_sign);
+
+            let new_ray = Ray::new(indirect_origin, sample.direction);
+            let indirect_light = Self::trace(&new_ray, scene, depth - 1, rng);
+
+            // Apply importance sampling: divide by PDF
+            if sample.pdf > 1e-5 {
+                (indirect_light.component_mul(&sample.bsdf_value) * cos_theta) / sample.pdf
+            } else {
+                Vector3::zeros()
+            }
         } else {
             Vector3::zeros()
         };
+
         // Combine: emissive + direct*albedo + indirect*albedo
         // Direct light gets modulated by albedo here
         // Indirect light gets modulated by albedo because it represents incoming radiance that needs to be reflected
