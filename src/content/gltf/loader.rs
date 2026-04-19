@@ -179,10 +179,10 @@ impl GltfLoader {
         Ok(meshes)
     }
 
-    fn create_scene_node(node: &Node, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, mesh_data_map: &mut Vec<Option<Vec<Arc<MeshData>>>>, material_data_map: &mut Vec<Option<Arc<Material>>>, folder: &Path, parent_transform: &Matrix4<f32>) -> anyhow::Result<SceneNode> {
+    fn create_scene_node(node: &Node, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, mesh_data_map: &mut Vec<Option<Vec<Arc<MeshData>>>>, material_data_map: &mut Vec<Option<Arc<Material>>>, folder: &Path, parent_transform: &Matrix4<f32>, options: &RenderOptions) -> anyhow::Result<SceneNode> {
         let transform = parent_transform * Matrix4::from(node.transform().matrix());
         let children = node.children().map(|child|{
-            Self::create_scene_node(&child, buffers, cameras, lights, meshes, mesh_data_map, material_data_map, folder, &transform)
+            Self::create_scene_node(&child, buffers, cameras, lights, meshes, mesh_data_map, material_data_map, folder, &transform, options)
         }).collect::<anyhow::Result<Vec<SceneNode>>>()?;
 
         let mut mesh_indices = Vec::new();
@@ -230,8 +230,7 @@ impl GltfLoader {
             let (_, up, forward) = Self::extract_directions(&transform);
             let origin = Self::extract_translation(&transform);
 
-            //let aspect_ratio = options.width as f32 / options.height as f32;
-            let aspect_ratio = 800.0 / 600.0; // TODO: Pass this in properly instead of hardcoding.
+            let aspect_ratio = options.resolution.width as f32 / options.resolution.height as f32;
 
             camera_index = Some(cameras.len());
             cameras.push(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov()))
@@ -255,12 +254,12 @@ impl GltfLoader {
     }
 
 
-    fn load_node_graph(scene: &gltf::scene::Scene, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, folder: &Path, total_mesh_count: usize, total_material_count: usize) -> anyhow::Result<NodeGraph> {
+    fn load_node_graph(scene: &gltf::scene::Scene, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, folder: &Path, total_mesh_count: usize, total_material_count: usize, options: &RenderOptions) -> anyhow::Result<NodeGraph> {
         let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
         let mut material_map : Vec<Option<Arc<Material>>> = vec![None; total_material_count];
 
         let nodes = scene.nodes().map(|node|{
-            Self::create_scene_node(&node, buffers, cameras, lights, meshes, &mut mesh_data_map, &mut material_map, folder, &Matrix4::identity())
+            Self::create_scene_node(&node, buffers, cameras, lights, meshes, &mut mesh_data_map, &mut material_map, folder, &Matrix4::identity(), options)
         }).collect::<anyhow::Result<Vec<SceneNode>>>()?;
 
         Ok(NodeGraph::new(nodes))
@@ -333,7 +332,7 @@ impl SceneLoader for GltfLoader {
             let mut cameras = Vec::new();
             let mut lights = Vec::new();
             let mut meshes = Vec::new();
-            let node_graph = Self::load_node_graph(&scene, &buffers, &mut cameras, &mut lights, &mut meshes, parent_folder, document.meshes().len(), document.materials().len())?;
+            let node_graph = Self::load_node_graph(&scene, &buffers, &mut cameras, &mut lights, &mut meshes, parent_folder, document.meshes().len(), document.materials().len(), options)?;
             let animations = Self::load_animations(&document, &buffers)?;
             println!("Loaded scene with {} meshes, {} cameras, {} lights", meshes.len(), cameras.len(), lights.len());
 

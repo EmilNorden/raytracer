@@ -1,11 +1,12 @@
 RenderOptions(
-    scene_file: "/Users/emilnorden/models/alley/alley.gltf",
+    // scene_file: "/Users/emilnorden/models/alley/alley.gltf",
+    scene_file: "/Users/emilnorden/models/test/gltf/test.gltf",
     output_folder: "output",
     resolution: Resolution(
         width: 800,
         height: 600,
     ),
-    samples: 10,
+    samples: 120,
     debug: false,
     max_bounces: 4,
     video: false,
