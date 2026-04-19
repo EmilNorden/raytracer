@@ -1,4 +1,3 @@
-use crate::camera::viewpoint::Viewpoint;
 use crate::core::Ray;
 use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
@@ -7,6 +6,7 @@ use crate::scene::ShadingContext;
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use rayon::prelude::*;
+use crate::camera::viewpoint::Viewpoint;
 
 pub struct PathTracingIntegrator {}
 
@@ -80,18 +80,29 @@ impl PathTracingIntegrator {
         };
 
         const MIN_PDF: f32 = 1e-5;
+        const RR_MIN_DEPTH: u32 = 3; // Start Russian roulette after this depth
 
-        let weighted_contribution = if sample.pdf > MIN_PDF || cos_theta > 0.0 {
+        let weighted_contribution = if sample.pdf > MIN_PDF && cos_theta > 0.0 {
             let indirect_origin = hit_point + n * (0.001 * offset_sign);
-
             let new_ray = Ray::new(indirect_origin, sample.direction);
-            let indirect_light = Self::trace(&new_ray, scene, depth - 1, rng);
 
-            // Apply importance sampling: divide by PDF
-            if sample.pdf > 1e-5 {
-                (indirect_light.component_mul(&sample.bsdf_value) * cos_theta) / sample.pdf
+            // Compute survival probability for Russian roulette
+            // Use max component of (BSDF * cos_theta) as a proxy for path importance
+            let bsdf_weighted = sample.bsdf_value.component_mul(&Vector3::new(cos_theta, cos_theta, cos_theta));
+            let max_component = bsdf_weighted.x.max(bsdf_weighted.y).max(bsdf_weighted.z);
+            let survival_prob = if depth <= RR_MIN_DEPTH {
+                1.0 // Continue with probability 1.0 for early bounces
             } else {
-                Vector3::zeros()
+                max_component.min(1.0) // Clamp to [0,1]
+            };
+
+            // Russian roulette termination
+            if rng.random::<f32>() > survival_prob {
+                Vector3::zeros() // Path terminated
+            } else {
+                let indirect_light = Self::trace(&new_ray, scene, depth - 1, rng);
+                // Re-weight by survival probability to maintain unbiasedness
+                (indirect_light.component_mul(&sample.bsdf_value) * cos_theta) / (sample.pdf * survival_prob)
             }
         } else {
             Vector3::zeros()
@@ -104,6 +115,7 @@ impl PathTracingIntegrator {
     }
 
     fn trace(ray: &Ray, scene: &Scene, depth: u32, rng: &mut impl Rng) -> Vector3<f32> {
+        // Safety cap: avoid pathological recursion (Russian roulette handles practical termination)
         if depth == 0 {
             return Vector3::zeros();
         }
@@ -134,7 +146,7 @@ impl Integrator for PathTracingIntegrator {
                 let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
                 //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
 
-                let result = Self::trace(&ray, scene, 4, &mut rng);
+                let result = Self::trace(&ray, scene, 32, &mut rng);
 
                 row[x] += result * samples_inv;
             }
