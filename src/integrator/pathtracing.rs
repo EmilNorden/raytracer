@@ -1,14 +1,17 @@
 use crate::core::Ray;
 use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
+use crate::camera::viewpoint::Viewpoint;
 use crate::scene::scene::Scene;
 use crate::scene::ShadingContext;
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use rayon::prelude::*;
-use crate::camera::viewpoint::Viewpoint;
 
 pub struct PathTracingIntegrator {}
+
+const MAX_BOUNCES: u32 = 32;
+const RR_WARMUP_BOUNCES: u32 = 3;
 
 impl PathTracingIntegrator {
     pub fn new() -> Self {
@@ -19,7 +22,8 @@ impl PathTracingIntegrator {
         hit: &ShadingContext,
         ray: &Ray,
         scene: &Scene,
-        depth: u32,
+        remaining_depth: u32,
+        bounce_index: u32,
         rng: &mut impl Rng,
     ) -> Vector3<f32> {
         let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
@@ -80,7 +84,6 @@ impl PathTracingIntegrator {
         };
 
         const MIN_PDF: f32 = 1e-5;
-        const RR_MIN_DEPTH: u32 = 3; // Start Russian roulette after this depth
 
         let weighted_contribution = if sample.pdf > MIN_PDF && cos_theta > 0.0 {
             let indirect_origin = hit_point + n * (0.001 * offset_sign);
@@ -90,7 +93,7 @@ impl PathTracingIntegrator {
             // Use max component of (BSDF * cos_theta) as a proxy for path importance
             let bsdf_weighted = sample.bsdf_value.component_mul(&Vector3::new(cos_theta, cos_theta, cos_theta));
             let max_component = bsdf_weighted.x.max(bsdf_weighted.y).max(bsdf_weighted.z);
-            let survival_prob = if depth <= RR_MIN_DEPTH {
+            let survival_prob = if bounce_index < RR_WARMUP_BOUNCES {
                 1.0 // Continue with probability 1.0 for early bounces
             } else {
                 max_component.min(1.0) // Clamp to [0,1]
@@ -100,7 +103,7 @@ impl PathTracingIntegrator {
             if rng.random::<f32>() > survival_prob {
                 Vector3::zeros() // Path terminated
             } else {
-                let indirect_light = Self::trace(&new_ray, scene, depth - 1, rng);
+                let indirect_light = Self::trace(&new_ray, scene, remaining_depth - 1, bounce_index + 1, rng);
                 // Re-weight by survival probability to maintain unbiasedness
                 (indirect_light.component_mul(&sample.bsdf_value) * cos_theta) / (sample.pdf * survival_prob)
             }
@@ -114,15 +117,21 @@ impl PathTracingIntegrator {
         emissive + direct_light + weighted_contribution
     }
 
-    fn trace(ray: &Ray, scene: &Scene, depth: u32, rng: &mut impl Rng) -> Vector3<f32> {
+    fn trace(
+        ray: &Ray,
+        scene: &Scene,
+        remaining_depth: u32,
+        bounce_index: u32,
+        rng: &mut impl Rng,
+    ) -> Vector3<f32> {
         // Safety cap: avoid pathological recursion (Russian roulette handles practical termination)
-        if depth == 0 {
+        if remaining_depth == 0 {
             return Vector3::zeros();
         }
 
         scene
             .intersect(ray)
-            .map(|hit| Self::shade(&hit, ray, scene, depth, rng))
+            .map(|hit| Self::shade(&hit, ray, scene, remaining_depth, bounce_index, rng))
             .unwrap_or_else(|| scene.environment(&ray))
     }
 }
@@ -146,7 +155,7 @@ impl Integrator for PathTracingIntegrator {
                 let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
                 //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
 
-                let result = Self::trace(&ray, scene, 32, &mut rng);
+                let result = Self::trace(&ray, scene, MAX_BOUNCES, 0, &mut rng);
 
                 row[x] += result * samples_inv;
             }
