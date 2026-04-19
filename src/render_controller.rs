@@ -1,8 +1,10 @@
+use std::future::ready;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-
+use ffmpeg_cli::{FfmpegBuilder, File, Parameter};
 use crate::animation::controller::{AnimationController, AnimationState};
 use crate::frame::Frame;
 use crate::integrator::integrator::{Integrator, IntegratorImpl};
@@ -38,7 +40,6 @@ impl RenderController {
         mut scene: Scene,
         mut animation_controller: AnimationController,
         integrator: IntegratorImpl,
-        frame_index: u32,
         proxy: EventLoopProxy<RenderNotification>,
     ) -> Self {
         let (update_tx, update_rx) = mpsc::channel();
@@ -50,6 +51,7 @@ impl RenderController {
 
             let frame_duration = 1.0 / options.frame_rate as f32;
             let mut stop_video = false;
+            let mut frame_index = 0;
 
             loop {
                 for sample in 1..=options.samples {
@@ -62,11 +64,14 @@ impl RenderController {
                     let mut rgba = vec![0_u8; (frame.width() * frame.height() * 4) as usize];
                     frame.write_rgba(&mut rgba);
 
-                    let is_done = !options.video && sample == options.samples;
+                    let is_done = sample == options.samples;
                     let output_path = if is_done {
                         let path = std::path::Path::new(&options.output_folder)
-                            .join(format!("out{}.png", frame_index));
+                            .join(format!("out{:04}.png", frame_index));
                         frame.save(path.clone());
+                        frame.clear();
+                        frame_index += 1;
+
                         Some(path)
                     } else {
                         None
@@ -93,6 +98,17 @@ impl RenderController {
                 }
 
                 if stop_video {
+                    let status = Command::new("ffmpeg")
+                        .current_dir("output") // 👈 only ffmpeg runs here
+                        .args([
+                            "-framerate", "30",
+                            "-i", "out%04d.png",
+                            "-pix_fmt", "yuv420p",
+                            "out.mp4",
+                        ])
+                        .status()
+                        .expect("failed to run ffmpeg");
+
                     break;
                 }
 

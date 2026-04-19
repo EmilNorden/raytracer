@@ -205,7 +205,6 @@ impl GltfLoader {
         if let Some(light) = node.light() {
             match light.kind() {
                 Kind::Point => {
-                    let transform = Matrix4::from(node.transform().matrix());
                     let position = Self::extract_translation(&transform);
                     let intensity = light.intensity();
 
@@ -228,9 +227,8 @@ impl GltfLoader {
                 Projection::Perspective(x) => x
             };
 
-            let camera_transform = Matrix4::from(node.transform().matrix());
-            let (_, up, forward) = Self::extract_directions(&camera_transform);
-            let origin = Self::extract_translation(&camera_transform);
+            let (_, up, forward) = Self::extract_directions(&transform);
+            let origin = Self::extract_translation(&transform);
 
             //let aspect_ratio = options.width as f32 / options.height as f32;
             let aspect_ratio = 800.0 / 600.0; // TODO: Pass this in properly instead of hardcoding.

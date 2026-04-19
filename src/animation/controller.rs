@@ -50,7 +50,7 @@ impl AnimationController {
 
     pub fn step(&mut self, delta_time: f32, scene: &mut Scene) -> AnimationState {
         self.time += delta_time;
-/*
+
         for animation in &self.animations {
             for channel in &animation.channels {
                 let node = Self::get_node(&mut self.node_graph.roots, channel.node_index).unwrap();
@@ -59,11 +59,6 @@ impl AnimationController {
                         let to_index = channel.timestamps
                             .partition_point(|t| *t <= self.time);
                         let from_index = to_index.saturating_sub(1);
-
-                        let t_start = channel.timestamps[from_index];
-                        let t_end = channel.timestamps[to_index];
-                        let t_delta = t_end - t_start;
-                        let t_ratio = ((self.time - t_start) / t_delta).clamp(0.0, 1.0);
 
                         match &channel.outputs {
                             AnimationOutputs::Translation(translations) => {
@@ -76,6 +71,11 @@ impl AnimationController {
                                     node.local_transform.translation = Vector3::new(first_trans.x, first_trans.y, first_trans.z);
                                 }
                                 else {
+                                    let t_start = channel.timestamps[from_index];
+                                    let t_end = channel.timestamps[to_index];
+                                    let t_delta = t_end - t_start;
+                                    let t_ratio = ((self.time - t_start) / t_delta).clamp(0.0, 1.0);
+
                                     let trans_start = translations[from_index];
                                     let trans_end = translations[to_index];
                                     let trans_interp = trans_start.lerp(&trans_end, t_ratio);
@@ -92,6 +92,11 @@ impl AnimationController {
                                     node.local_transform.rotation = *first_rot;
                                 }
                                 else {
+                                    let t_start = channel.timestamps[from_index];
+                                    let t_end = channel.timestamps[to_index];
+                                    let t_delta = t_end - t_start;
+                                    let t_ratio = ((self.time - t_start) / t_delta).clamp(0.0, 1.0);
+
                                     let rot_start = rotations[from_index];
                                     let rot_end = rotations[to_index];
                                     let rot_interp = rot_start.slerp(&rot_end, t_ratio);
@@ -108,6 +113,11 @@ impl AnimationController {
                                     node.local_transform.scale = *first_scale;
                                 }
                                 else {
+                                    let t_start = channel.timestamps[from_index];
+                                    let t_end = channel.timestamps[to_index];
+                                    let t_delta = t_end - t_start;
+                                    let t_ratio = ((self.time - t_start) / t_delta).clamp(0.0, 1.0);
+
                                     let scale_start = scales[from_index];
                                     let scale_end = scales[to_index];
                                     let scale_interp = scale_start.lerp(&scale_end, t_ratio);
@@ -124,7 +134,7 @@ impl AnimationController {
                 }
             }
         }
-*/
+
         Self::update_scene(self.node_graph.roots.as_mut_slice(), &nalgebra::Matrix4::identity(), scene);
         scene.rebuild_bvh();
 

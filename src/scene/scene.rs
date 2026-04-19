@@ -92,7 +92,7 @@ impl Scene {
         &self.lights
     }
 
-    pub fn environment(&self, ray: &Ray) -> Vector3<f32> {
+    pub fn environment(&self, _: &Ray) -> Vector3<f32> {
         Vector3::zeros()
     }
 

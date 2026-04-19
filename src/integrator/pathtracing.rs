@@ -113,6 +113,25 @@ impl Integrator for PathTracingIntegrator {
         let width = frame.width() as usize;
         let height = frame.height() as usize;
 
+        //let mut flat_buffer = vec![Vector3::new(0.0, 0.0, 0.0); width * height];
+
+        frame.pixels_mut().par_chunks_mut(width).enumerate().for_each(|(y, row)| {
+            let mut rng = rand::rng();
+            let mut pixels = vec![Vector3::new(0.0, 0.0, 0.0); width];
+            let v = y as f32 / height as f32;
+            for x in 0..width {
+                let u = x as f32 / width as f32;
+
+                let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
+                //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
+
+                let result = Self::trace(&ray, scene, 4, &mut rng);
+
+                row[x] += result * (1.0 / samples as f32);
+            }
+
+        });
+/*
         let scanlines = (0..height)
             .into_par_iter()
             .map(|y| {
@@ -138,6 +157,6 @@ impl Integrator for PathTracingIntegrator {
             for x in 0..width {
                 frame.add_sample(x, y, scanlines[y][x])
             }
-        }
+        }*/
     }
 }

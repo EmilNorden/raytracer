@@ -5,9 +5,9 @@ RenderOptions(
         width: 800,
         height: 600,
     ),
-    samples: 20,
+    samples: 40,
     debug: false,
     max_bounces: 4,
-    video: true,
-    frame_rate: 30,
+    video: false,
+    frame_rate: 60,
 )

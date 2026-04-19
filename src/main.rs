@@ -57,12 +57,13 @@ impl App {
             self.latest_rgba = update.rgba;
 
             if update.is_done && !self.is_done {
-                self.is_done = true;
                 println!("Render time: {:?}", update.elapsed);
                 if let Some(path) = update.output_path {
                     println!("Saved frame to {}", path.display());
                 }
             }
+
+            self.is_done = update.is_done;
 
             self.update_window_title();
         }
@@ -173,7 +174,7 @@ fn main() {
         .unwrap();
     let proxy: EventLoopProxy<RenderNotification> = event_loop.create_proxy();
 
-    let render_controller = RenderController::start(options, scene, animation_controller, integrator, 0, proxy);
+    let render_controller = RenderController::start(options, scene, animation_controller, integrator, proxy);
 
     let mut app = App {
         width,
