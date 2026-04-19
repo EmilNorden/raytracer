@@ -7,10 +7,13 @@ use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::scene_loader::{SceneError, SceneLoader};
 use crate::scene::scene::Scene;
 use std::sync::Arc;
+use gltf::animation::Interpolation;
+use gltf::animation::util::{ReadOutputs, Rotations};
 use gltf::buffer::Data;
 use gltf::mesh::Mode;
 use gltf::Node;
 use gltf::scene::iter;
+use crate::animation::{Animation, AnimationChannel, AnimationOutputs};
 use crate::content::gltf::material::create_material;
 use crate::content::mesh::{MeshInstance, MeshData};
 use crate::content::triangle::{Triangle, Vertex};
@@ -263,6 +266,60 @@ impl GltfLoader {
 
         Ok(NodeGraph::new(nodes))
     }
+
+    fn load_animations(document: &gltf::Document, buffers: &Vec<Data>) -> anyhow::Result<Vec<Animation>> {
+        let mut animations = Vec::new();
+        for animation in document.animations() {
+            let mut channels = Vec::new();
+            for channel in animation.channels() {
+                let target = channel.target();
+                let node = target.node();
+                let interpolation = match channel.sampler().interpolation() {
+                    Interpolation::Linear => crate::animation::Interpolation::Linear,
+                    Interpolation::Step => crate::animation::Interpolation::Step,
+                    Interpolation::CubicSpline => crate::animation::Interpolation::CubicSpline,
+                };
+
+                let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
+
+                let timestamps: Vec<f32> = reader.read_inputs().map(|inputs| inputs.collect())
+                    .ok_or_else(|| SceneError::UnsupportedFormat("No animation inputs found".to_string()))?;
+
+                let outputs = reader.read_outputs().map(|outputs| {
+                    match outputs {
+                        ReadOutputs::Translations(values) => {
+                            let vals: Vec<[f32; 3]> = values.collect();
+                            AnimationOutputs::Translation(vals.into_iter().map(|v| Point3::new(v[0], v[1], v[2])).collect())
+                        }
+                        ReadOutputs::Rotations(values) => {
+                            match values {
+                                Rotations::I8(_) => panic!("I8 rotation!"),
+                                Rotations::U8(_) => panic!("U8 rotation!"),
+                                Rotations::I16(_) => panic!("I16 rotation!"),
+                                Rotations::U16(_) => panic!("U16 rotation!"),
+                                Rotations::F32(values_f32) => {
+                                    let vals: Vec<[f32; 4]> = values_f32.collect();
+                                    AnimationOutputs::Rotation(vals.into_iter().map(|v| UnitQuaternion::from_quaternion(Quaternion::new(v[3], v[0], v[1], v[2]))).collect())
+                                }
+                            }
+                        }
+                        ReadOutputs::Scales(values) => {
+                            let vals: Vec<[f32; 3]> = values.collect();
+                            AnimationOutputs::Scale(vals.into_iter().map(|v| Vector3::new(v[0], v[1], v[2])).collect())
+                        }
+                        ReadOutputs::MorphTargetWeights(_) => panic!("Morph targets not supported"),
+                    }
+                }).ok_or_else(|| SceneError::UnsupportedFormat("No animation outputs found".to_string()))?;
+
+                channels.push(AnimationChannel::new(node.index(), timestamps, outputs, interpolation));
+            }
+
+            animations.push(Animation::new(animation.name().unwrap_or("Unnamed").to_string(), channels));
+
+        };
+
+        Ok(animations)
+    }
 }
 impl SceneLoader for GltfLoader {
     fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions) -> anyhow::Result<Scene> {
@@ -273,14 +330,15 @@ impl SceneLoader for GltfLoader {
         let (document, buffers , images) = gltf::import(path)?;
 
         if let Some(scene) = document.default_scene() {
+
             let mut cameras = Vec::new();
             let mut lights = Vec::new();
             let mut meshes = Vec::new();
             let node_graph = Self::load_node_graph(&scene, &buffers, &mut cameras, &mut lights, &mut meshes, parent_folder, document.meshes().len(), document.materials().len())?;
-
+            let animations = Self::load_animations(&document, &buffers)?;
             println!("Loaded scene with {} meshes, {} cameras, {} lights", meshes.len(), cameras.len(), lights.len());
 
-            Ok(Scene::new(node_graph, cameras, meshes, lights))
+            Ok(Scene::new(node_graph, cameras, meshes, lights, animations))
         }
         else { Err(SceneError::NoDefaultScene.into()) }
     }

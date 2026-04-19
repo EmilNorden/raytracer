@@ -23,6 +23,7 @@ mod integrator;
 mod frame;
 mod options;
 mod static_stack;
+mod animation;
 
 struct App {
     options: RenderOptions,

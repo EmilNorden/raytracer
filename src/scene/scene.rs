@@ -1,5 +1,6 @@
 use nalgebra::{Matrix4, Point3, Vector3};
 use crate::acceleration::bvh::BVH;
+use crate::animation::Animation;
 use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::MeshInstance;
 use crate::core::Ray;
@@ -18,10 +19,11 @@ pub struct Scene {
     meshes: Vec<MeshInstance>,
     bvh: BVH,
     lights: Vec<LightSource>,
+    animations: Vec<Animation>,
 }
 
 impl Scene {
-    pub fn new(node_graph: NodeGraph, cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, mut lights: Vec<LightSource>) -> Self {
+    pub fn new(node_graph: NodeGraph, cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, mut lights: Vec<LightSource>, animations: Vec<Animation>) -> Self {
         for mesh in &meshes {
             if mesh.material().emissive_factor() != Vector3::zeros() {
                 lights.push(LightSource::Mesh(mesh.clone()));
@@ -37,6 +39,7 @@ impl Scene {
             meshes,
             bvh,
             lights,
+            animations
         }
     }
 
