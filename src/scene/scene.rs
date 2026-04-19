@@ -62,30 +62,11 @@ impl Scene {
     pub fn intersect(&self, ray: &Ray) -> Option<ShadingContext> {
        self.bvh.intersect(self.meshes.as_slice(), ray).map(|(mesh_index, hit)| {
             ShadingContext {
-                ray: ray.clone(),
                 intersection: hit,
                 material: self.meshes[mesh_index as usize].material(),
                 mesh_index: self.meshes[mesh_index as usize].mesh_index(),
             }
         })
-        /*let mut best_dist = f32::MAX;
-        let mut best_hit = None;
-        for object in &self.meshes {
-
-            if let Some(hit) = object.intersect(ray, 0.0, f32::MAX) {
-                if hit.dist < best_dist {
-                    best_dist = hit.dist;
-                    best_hit = Some(ShadingContext {
-                        ray: ray.clone(),
-                        intersection: hit,
-                        material: object.material(),
-                        mesh_index: object.mesh_index()
-                    });
-                }
-            }
-        }
-
-        best_hit*/
     }
 
     pub fn lights(&self) -> &Vec<LightSource> {

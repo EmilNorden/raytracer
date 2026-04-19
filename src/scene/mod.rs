@@ -21,7 +21,6 @@ pub struct Intersection {
 }
 
 pub struct ShadingContext<'a> {
-    pub ray: Ray,
     pub intersection: Intersection,
     pub material: &'a Material,
     pub mesh_index: usize,

@@ -120,7 +120,7 @@ impl Integrator for PathTracingIntegrator {
         // TODO: Can this "threading boilerplate" be moved outside the integrator, so every dont have to do the same thing?
         let width = frame.width() as usize;
         let height = frame.height() as usize;
-        
+
         let height_inv = 1.0 / height as f32;
         let width_inv = 1.0 / width as f32;
         let samples_inv = 1.0 / samples as f32;
