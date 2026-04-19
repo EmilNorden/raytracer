@@ -1,18 +1,17 @@
 use std::sync::Arc;
-use std::time::Instant;
-use clap::Parser;
+
 use pixels::{Pixels, SurfaceTexture};
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalSize, Size};
+use winit::dpi::{LogicalSize, Size};
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowId};
+
 use crate::content::gltf::loader::GltfLoader;
 use crate::content::scene_loader::SceneLoader;
-use crate::frame::Frame;
-use crate::options::{RenderOptions};
-use crate::integrator::integrator::{Integrator, IntegratorImpl};
-use crate::scene::scene::Scene;
+use crate::integrator::integrator::create;
+use crate::options::RenderOptions;
+use crate::render_controller::{RenderController, RenderNotification};
 
 mod core;
 mod camera;
@@ -24,80 +23,103 @@ mod frame;
 mod options;
 mod static_stack;
 mod animation;
+mod render_controller;
 
 struct App {
-    options: RenderOptions,
-    scene: Scene,
-    frame: Frame,
-    integrator: IntegratorImpl,
+    width: u32,
+    height: u32,
+    total_samples: u32,
     window: Option<Arc<Window>>,
     pixels: Option<Pixels<'static>>,
+    render_controller: RenderController,
+    latest_rgba: Vec<u8>,
     current_sample: u32,
-    render_start: Instant,
-    frame_index: u32,
+    is_done: bool,
 }
 
 impl App {
     fn update_window_title(&self) {
         if let Some(window) = self.window.as_ref() {
-            window.set_title(&format!(
-                "Pathtracer - sample {}/{}",
-                self.current_sample, self.options.samples
-            ));
+            if self.is_done {
+                window.set_title("Pathtracer - done");
+            } else {
+                window.set_title(&format!(
+                    "Pathtracer - sample {}/{}",
+                    self.current_sample, self.total_samples
+                ));
+            }
         }
     }
 
-    fn render_next_sample(&mut self, event_loop: &ActiveEventLoop) {
-        if self.current_sample >= self.options.samples {
-            return;
+    fn pull_render_updates(&mut self) {
+        if let Some(update) = self.render_controller.latest_update() {
+            self.current_sample = update.sample;
+            self.latest_rgba = update.rgba;
+
+            if update.is_done && !self.is_done {
+                self.is_done = true;
+                println!("Render time: {:?}", update.elapsed);
+                if let Some(path) = update.output_path {
+                    println!("Saved frame to {}", path.display());
+                }
+            }
+
+            self.update_window_title();
         }
+    }
 
-        self.integrator
-            .integrate(&self.scene, &mut self.frame, self.options.samples);
-        self.current_sample += 1;
-        self.update_window_title();
-
+    fn draw_latest_frame(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(pixels) = self.pixels.as_mut() {
-            self.frame.write_rgba(pixels.frame_mut());
+            if pixels.frame_mut().len() == self.latest_rgba.len() {
+                pixels.frame_mut().copy_from_slice(&self.latest_rgba);
+            }
+
             if let Err(err) = pixels.render() {
                 eprintln!("Failed to render to window: {err}");
                 event_loop.exit();
-                return;
             }
         }
+    }
+}
 
-        if self.current_sample >= self.options.samples {
-            println!("Render time: {:?}", self.render_start.elapsed());
-            if let Some(window) = self.window.as_ref() {
-                window.set_title("Pathtracer - done");
-            }
-            let path = std::path::Path::new(&self.options.output_folder).join(format!("out{}.png", self.frame_index));
-            self.frame.save(path);
-            self.frame_index += 1;
-            return;
-        }
+impl ApplicationHandler<RenderNotification> for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let window = Arc::new(
+            event_loop
+                .create_window(
+                    Window::default_attributes()
+                        .with_title("Pathtracer")
+                        .with_inner_size(Size::Logical(LogicalSize::new(
+                            self.width as f64,
+                            self.height as f64,
+                        ))),
+                )
+                .unwrap(),
+        );
+
+        let surface = SurfaceTexture::new(
+            self.width,
+            self.height,
+            window.clone(),
+        );
+        let pixels = Pixels::new(self.width, self.height, surface)
+        .expect("Failed to create pixel surface");
+
+        self.window = Some(window);
+        self.pixels = Some(pixels);
+        self.update_window_title();
 
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
         }
     }
-}
 
-impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = Arc::new(event_loop.create_window(Window::default_attributes()
-            .with_title("Pathtracer")
-            .with_inner_size(Size::Logical(LogicalSize::new(self.options.resolution.width as f64,
-                                                              self.options.resolution.height as f64)))).unwrap());
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: RenderNotification) {
+        self.pull_render_updates();
 
-        let surface = SurfaceTexture::new(self.options.resolution.width, self.options.resolution.height, window.clone());
-        let pixels = Pixels::new(self.options.resolution.width, self.options.resolution.height, surface)
-            .expect("Failed to create pixel surface");
-
-        window.request_redraw();
-        self.window = Some(window);
-        self.update_window_title();
-        self.pixels = Some(pixels);
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
@@ -108,7 +130,7 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
-            },
+            }
             WindowEvent::Resized(size) => {
                 if let Some(pixels) = self.pixels.as_mut() {
                     if let Err(err) = pixels.resize_surface(size.width, size.height) {
@@ -118,23 +140,15 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
-                self.render_next_sample(event_loop);
-            },
-            _ => ()
-        }
-    }
-
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if self.current_sample < self.options.samples {
-            if let Some(window) = self.window.as_ref() {
-                window.request_redraw();
+                self.draw_latest_frame(event_loop);
             }
+            _ => {}
         }
     }
 }
 
 fn read_options() -> anyhow::Result<RenderOptions> {
-    let launch_file: RenderOptions = ron::de::from_reader( std::fs::File::open("launch.ron")?)?;
+    let launch_file: RenderOptions = ron::de::from_reader(std::fs::File::open("launch.ron")?)?;
 
     Ok(launch_file)
 }
@@ -149,23 +163,29 @@ fn main() {
         return;
     }
 
-    let frame = Frame::new(options.resolution.width, options.resolution.height);
+    let integrator = create(&options);
+    let width = options.resolution.width;
+    let height = options.resolution.height;
+    let total_samples = options.samples;
 
-    let integrator = integrator::integrator::create(&options);
+    let event_loop = EventLoop::<RenderNotification>::with_user_event()
+        .build()
+        .unwrap();
+    let proxy: EventLoopProxy<RenderNotification> = event_loop.create_proxy();
 
-    let event_loop = EventLoop::new().unwrap();
+    let render_controller = RenderController::start(options, scene, integrator, 0, proxy);
 
     let mut app = App {
-        options,
-        scene,
-        frame,
-        integrator,
+        width,
+        height,
+        total_samples,
         window: None,
         pixels: None,
+        render_controller,
+        latest_rgba: vec![0; (width * height * 4) as usize],
         current_sample: 0,
-        render_start: Instant::now(),
-        frame_index: 0,
+        is_done: false,
     };
 
-    event_loop.run_app(&mut app).expect("TODO: panic message");
+    event_loop.run_app(&mut app).expect("Failed to run app");
 }

@@ -1,0 +1,125 @@
+use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+
+use winit::event_loop::EventLoopProxy;
+
+use crate::frame::Frame;
+use crate::integrator::integrator::{Integrator, IntegratorImpl};
+use crate::options::RenderOptions;
+use crate::scene::scene::Scene;
+
+pub enum RenderNotification {
+    FrameReady,
+}
+
+pub struct RenderUpdate {
+    pub sample: u32,
+    pub rgba: Vec<u8>,
+    pub is_done: bool,
+    pub elapsed: Duration,
+    pub output_path: Option<PathBuf>,
+}
+
+enum RenderCommand {
+    Stop,
+}
+
+pub struct RenderController {
+    update_rx: Receiver<RenderUpdate>,
+    command_tx: Sender<RenderCommand>,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl RenderController {
+    pub fn start(
+        options: RenderOptions,
+        scene: Scene,
+        integrator: IntegratorImpl,
+        frame_index: u32,
+        proxy: EventLoopProxy<RenderNotification>,
+    ) -> Self {
+        let (update_tx, update_rx) = mpsc::channel();
+        let (command_tx, command_rx) = mpsc::channel();
+
+        let worker = thread::spawn(move || {
+            let mut frame = Frame::new(options.resolution.width, options.resolution.height);
+            let render_start = Instant::now();
+
+            for sample in 1..=options.samples {
+                if Self::should_stop(&command_rx) {
+                    break;
+                }
+
+                integrator.integrate(&scene, &mut frame, options.samples);
+
+                let mut rgba = vec![0_u8; (frame.width() * frame.height() * 4) as usize];
+                frame.write_rgba(&mut rgba);
+
+                let is_done = sample == options.samples;
+                let output_path = if is_done {
+                    let path = std::path::Path::new(&options.output_folder)
+                        .join(format!("out{}.png", frame_index));
+                    frame.save(path.clone());
+                    Some(path)
+                } else {
+                    None
+                };
+
+                let update = RenderUpdate {
+                    sample,
+                    rgba,
+                    is_done,
+                    elapsed: render_start.elapsed(),
+                    output_path,
+                };
+
+                if update_tx.send(update).is_err() {
+                    break;
+                }
+
+                // Wake the event loop so the UI thread can fetch and present the latest frame.
+                let _ = proxy.send_event(RenderNotification::FrameReady);
+            }
+        });
+
+        Self {
+            update_rx,
+            command_tx,
+            worker: Some(worker),
+        }
+    }
+
+    pub fn latest_update(&self) -> Option<RenderUpdate> {
+        let mut latest = None;
+        while let Ok(update) = self.update_rx.try_recv() {
+            latest = Some(update);
+        }
+        latest
+    }
+
+    pub fn stop(&mut self) {
+        let _ = self.command_tx.send(RenderCommand::Stop);
+
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+
+    fn should_stop(command_rx: &Receiver<RenderCommand>) -> bool {
+        match command_rx.try_recv() {
+            Ok(RenderCommand::Stop) => true,
+            Err(TryRecvError::Disconnected) => true,
+            Err(TryRecvError::Empty) => false,
+        }
+    }
+}
+
+impl Drop for RenderController {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+
