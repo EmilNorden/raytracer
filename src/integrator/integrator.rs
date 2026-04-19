@@ -2,7 +2,6 @@ use nalgebra::Vector3;
 use crate::frame::Frame;
 use crate::integrator::debug::DebugIntegrator;
 use crate::integrator::pathtracing::PathTracingIntegrator;
-use crate::integrator::whitted::WhittedIntegrator;
 use crate::options::RenderOptions;
 use crate::scene::scene::Scene;
 
@@ -13,7 +12,6 @@ pub trait Integrator {
 pub enum IntegratorImpl {
     Debug(DebugIntegrator),
     Pathtracing(PathTracingIntegrator),
-    Whitted(WhittedIntegrator),
 }
 
 impl Integrator for IntegratorImpl {
@@ -23,9 +21,6 @@ impl Integrator for IntegratorImpl {
                 i.integrate(scene, frame, samples);
             }
             IntegratorImpl::Pathtracing(i) => {
-                i.integrate(scene, frame, samples);
-            }
-            IntegratorImpl::Whitted(i) => {
                 i.integrate(scene, frame, samples);
             }
         }
