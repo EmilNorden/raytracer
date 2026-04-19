@@ -6,6 +6,19 @@ pub enum LightSource {
     Mesh(MeshInstance),
 }
 
+impl LightSource {
+    pub fn update_transform(&mut self, transform: nalgebra::Matrix4<f32>) {
+        match self {
+            LightSource::Point(light) => {
+                light.position = transform.transform_point(&Point3::origin());
+            }
+            LightSource::Mesh(mesh) => {
+                mesh.update_transform(transform);
+            }
+        }
+    }
+}
+
 pub struct PointLight {
     pub color: Vector3<f32>,
     pub intensity: f32,

@@ -1,3 +1,5 @@
+pub mod controller;
+
 use nalgebra::{Point3, UnitQuaternion, Vector3};
 
 pub struct Animation {

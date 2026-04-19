@@ -139,6 +139,11 @@ impl MeshInstance {
             inverse_transform: transform.try_inverse().unwrap()
         }
     }
+    
+    pub fn update_transform(&mut self, transform: nalgebra::Matrix4<f32>) {
+        self.transform = transform;
+        self.inverse_transform = transform.try_inverse().unwrap();
+    }
 
     pub fn mesh_index(&self) -> usize {
         self.mesh_index

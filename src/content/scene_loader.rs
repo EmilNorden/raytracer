@@ -1,4 +1,5 @@
 use std::path::Path;
+use crate::animation::controller::AnimationController;
 use crate::RenderOptions;
 use crate::scene::scene::Scene;
 
@@ -26,5 +27,5 @@ impl std::fmt::Display for SceneError {
 }
 
 pub trait SceneLoader {
-    fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions) -> anyhow::Result<Scene>;
+    fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions) -> anyhow::Result<(Scene, AnimationController)>;
 }

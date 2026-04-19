@@ -1,8 +1,9 @@
 use std::f32::consts::PI;
-use nalgebra::{Point3, Vector2, Vector3};
+use nalgebra::{Matrix4, Point3, Vector2, Vector3};
 use rand::Rng;
 use crate::camera::viewpoint::Viewpoint;
 use crate::core::Ray;
+use crate::scene::node_graph::NodeTransform;
 
 struct ViewPlane {
     base: Point3<f32>,
@@ -52,6 +53,17 @@ pub struct PerspectiveCamera {
 impl PerspectiveCamera {
     pub fn new(origin: Point3<f32>, direction: Vector3<f32>, up: Vector3<f32>, aspect_ratio: f32, yfov: f32) -> Self {
         Self { origin, direction, up, aspect_ratio, view_plane: ViewPlane::new(origin, direction, up, yfov, aspect_ratio) }
+    }
+
+    pub fn update_transform(&mut self, transform: Matrix4<f32>) {
+        let position = transform.transform_point(&Point3::origin());
+        let forward = transform.transform_vector(&Vector3::new(0.0, 0.0, -1.0)).normalize();
+        let up = transform.transform_vector(&Vector3::new(0.0, 1.0, 0.0)).normalize();
+
+        self.origin = position;
+        self.direction = forward;
+        self.up = up;
+        self.view_plane = ViewPlane::new(self.origin, self.direction, self.up, self.view_plane.size.y, self.aspect_ratio);
     }
 }
 

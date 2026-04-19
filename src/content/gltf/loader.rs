@@ -14,6 +14,7 @@ use gltf::mesh::Mode;
 use gltf::Node;
 use gltf::scene::iter;
 use crate::animation::{Animation, AnimationChannel, AnimationOutputs};
+use crate::animation::controller::AnimationController;
 use crate::content::gltf::material::create_material;
 use crate::content::mesh::{MeshInstance, MeshData};
 use crate::content::triangle::{Triangle, Vertex};
@@ -322,7 +323,7 @@ impl GltfLoader {
     }
 }
 impl SceneLoader for GltfLoader {
-    fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions) -> anyhow::Result<Scene> {
+    fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions) -> anyhow::Result<(Scene, AnimationController)> {
         let path = path.as_ref();
         let parent_folder = path.parent().unwrap();
 
@@ -338,7 +339,7 @@ impl SceneLoader for GltfLoader {
             let animations = Self::load_animations(&document, &buffers)?;
             println!("Loaded scene with {} meshes, {} cameras, {} lights", meshes.len(), cameras.len(), lights.len());
 
-            Ok(Scene::new(node_graph, cameras, meshes, lights, animations))
+            Ok((Scene::new(cameras, meshes, lights), AnimationController::new(node_graph, animations)))
         }
         else { Err(SceneError::NoDefaultScene.into()) }
     }

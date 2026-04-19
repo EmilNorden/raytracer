@@ -3,12 +3,12 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use winit::event_loop::EventLoopProxy;
-
+use crate::animation::controller::{AnimationController, AnimationState};
 use crate::frame::Frame;
 use crate::integrator::integrator::{Integrator, IntegratorImpl};
 use crate::options::RenderOptions;
 use crate::scene::scene::Scene;
+use winit::event_loop::EventLoopProxy;
 
 pub enum RenderNotification {
     FrameReady,
@@ -35,7 +35,8 @@ pub struct RenderController {
 impl RenderController {
     pub fn start(
         options: RenderOptions,
-        scene: Scene,
+        mut scene: Scene,
+        mut animation_controller: AnimationController,
         integrator: IntegratorImpl,
         frame_index: u32,
         proxy: EventLoopProxy<RenderNotification>,
@@ -47,40 +48,57 @@ impl RenderController {
             let mut frame = Frame::new(options.resolution.width, options.resolution.height);
             let render_start = Instant::now();
 
-            for sample in 1..=options.samples {
-                if Self::should_stop(&command_rx) {
+            let frame_duration = 1.0 / options.frame_rate as f32;
+            let mut stop_video = false;
+
+            loop {
+                for sample in 1..=options.samples {
+                    if Self::should_stop(&command_rx) {
+                        break;
+                    }
+
+                    integrator.integrate(&scene, &mut frame, options.samples);
+
+                    let mut rgba = vec![0_u8; (frame.width() * frame.height() * 4) as usize];
+                    frame.write_rgba(&mut rgba);
+
+                    let is_done = !options.video && sample == options.samples;
+                    let output_path = if is_done {
+                        let path = std::path::Path::new(&options.output_folder)
+                            .join(format!("out{}.png", frame_index));
+                        frame.save(path.clone());
+                        Some(path)
+                    } else {
+                        None
+                    };
+
+                    let update = RenderUpdate {
+                        sample,
+                        rgba,
+                        is_done,
+                        elapsed: render_start.elapsed(),
+                        output_path,
+                    };
+
+                    if update_tx.send(update).is_err() {
+                        break;
+                    }
+
+                    // Wake the event loop so the UI thread can fetch and present the latest frame.
+                    let _ = proxy.send_event(RenderNotification::FrameReady);
+                }
+
+                if !options.video {
                     break;
                 }
 
-                integrator.integrate(&scene, &mut frame, options.samples);
-
-                let mut rgba = vec![0_u8; (frame.width() * frame.height() * 4) as usize];
-                frame.write_rgba(&mut rgba);
-
-                let is_done = sample == options.samples;
-                let output_path = if is_done {
-                    let path = std::path::Path::new(&options.output_folder)
-                        .join(format!("out{}.png", frame_index));
-                    frame.save(path.clone());
-                    Some(path)
-                } else {
-                    None
-                };
-
-                let update = RenderUpdate {
-                    sample,
-                    rgba,
-                    is_done,
-                    elapsed: render_start.elapsed(),
-                    output_path,
-                };
-
-                if update_tx.send(update).is_err() {
+                if stop_video {
                     break;
                 }
 
-                // Wake the event loop so the UI thread can fetch and present the latest frame.
-                let _ = proxy.send_event(RenderNotification::FrameReady);
+                if animation_controller.step(frame_duration, &mut scene) == AnimationState::Finished {
+                    stop_video = true;
+                }
             }
         });
 
@@ -121,5 +139,3 @@ impl Drop for RenderController {
         self.stop();
     }
 }
-
-

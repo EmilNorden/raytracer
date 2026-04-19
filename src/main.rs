@@ -156,7 +156,7 @@ fn read_options() -> anyhow::Result<RenderOptions> {
 fn main() {
     let options = read_options().unwrap();
     println!("Using the following options:\n{}", options);
-    let scene = GltfLoader::load_scene(&options.scene_file, &options).unwrap();
+    let (scene, animation_controller) = GltfLoader::load_scene(&options.scene_file, &options).unwrap();
 
     if scene.lights().is_empty() {
         println!("No light sources found in scene. Aborting");
@@ -173,7 +173,7 @@ fn main() {
         .unwrap();
     let proxy: EventLoopProxy<RenderNotification> = event_loop.create_proxy();
 
-    let render_controller = RenderController::start(options, scene, integrator, 0, proxy);
+    let render_controller = RenderController::start(options, scene, animation_controller, integrator, 0, proxy);
 
     let mut app = App {
         width,

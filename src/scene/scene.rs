@@ -14,16 +14,14 @@ pub struct SceneNode {
     pub children: Vec<SceneNode>,
 }
 pub struct Scene {
-    node_graph: NodeGraph,
     cameras : Vec<PerspectiveCamera>,
     meshes: Vec<MeshInstance>,
     bvh: BVH,
     lights: Vec<LightSource>,
-    animations: Vec<Animation>,
 }
 
 impl Scene {
-    pub fn new(node_graph: NodeGraph, cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, mut lights: Vec<LightSource>, animations: Vec<Animation>) -> Self {
+    pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, mut lights: Vec<LightSource>) -> Self {
         for mesh in &meshes {
             if mesh.material().emissive_factor() != Vector3::zeros() {
                 lights.push(LightSource::Mesh(mesh.clone()));
@@ -34,17 +32,31 @@ impl Scene {
 
 
         Self {
-            node_graph,
             cameras,
             meshes,
             bvh,
             lights,
-            animations
         }
+    }
+
+    pub fn rebuild_bvh(&mut self) {
+        self.bvh = BVH::new(&mut self.meshes);
     }
 
     pub fn active_camera(&self) -> &PerspectiveCamera {
         &self.cameras[0]
+    }
+
+    pub fn cameras_mut(&mut self) -> &mut [PerspectiveCamera] {
+        &mut self.cameras
+    }
+
+    pub fn meshes_mut(&mut self) -> &mut [MeshInstance] {
+        &mut self.meshes
+    }
+
+    pub fn lights_mut(&mut self) -> &mut [LightSource] {
+        &mut self.lights
     }
 
     pub fn intersect(&self, ray: &Ray) -> Option<ShadingContext> {
