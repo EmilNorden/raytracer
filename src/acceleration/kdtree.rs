@@ -52,7 +52,7 @@ struct BuildTriangle {
 
 impl KDTree {
     const MAX_BUILD_DEPTH: usize = 64;
-    const MIN_LEAF_TRIANGLE_COUNT: usize = 128;
+    const MIN_LEAF_TRIANGLE_COUNT: usize = 32;
 
     pub fn new(vertices: &[Vertex], tri_indices: &[[u32; 3]]) -> Self {
        let mut bounds = AABB::from_points(vertices.iter().map(|x| x.position));
@@ -106,7 +106,8 @@ impl KDTree {
         };
 
         if global_tmax.is_nan() || global_tmin.is_nan() || global_tmax.is_infinite() || global_tmin.is_infinite() {
-            panic!("Oh no something is wrong");
+            // This should never happen. If it does, it means something is very wrong with the ray or the bounds intersection code.
+            return None;
         }
 
         let mut nodes = StaticStack::<NodeSearchData, 256>::new_with_default(
@@ -126,7 +127,8 @@ impl KDTree {
             }
 
             if tmin.is_nan() || tmax.is_nan() || tmin.is_infinite() || tmax.is_infinite() {
-                println!("Oh no something is wrong");
+                // This should never happen. If it does, it means something is very wrong with the ray or the bounds intersection code.
+                return None;
             }
 
             if let Some(hit) = Self::intersects_mesh(self, ray, node, triangle_edges, tmax.min(closest_hit_dist)) {

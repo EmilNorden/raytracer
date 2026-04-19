@@ -49,7 +49,7 @@ impl PathTracingIntegrator {
             if cos_theta > 0.0 && cos_theta_light > 0.0 {
                 // Cast shadow ray to check visibility
                 if scene.is_visible(surface_point, light_point) {
-                    let view_dir = -ray.direction().normalize();
+                    let view_dir = -ray.direction();
                     let brdf =
                         hit.material
                             .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, tex_coords);
@@ -115,19 +115,22 @@ impl Integrator for PathTracingIntegrator {
 
         //let mut flat_buffer = vec![Vector3::new(0.0, 0.0, 0.0); width * height];
 
+        let height_inv = 1.0 / height as f32;
+        let width_inv = 1.0 / width as f32;
+        let samples_inv = 1.0 / samples as f32;
+
         frame.pixels_mut().par_chunks_mut(width).enumerate().for_each(|(y, row)| {
             let mut rng = rand::rng();
-            let mut pixels = vec![Vector3::new(0.0, 0.0, 0.0); width];
-            let v = y as f32 / height as f32;
+            let v = y as f32 * height_inv;
             for x in 0..width {
-                let u = x as f32 / width as f32;
+                let u = x as f32 * width_inv;
 
                 let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
                 //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
 
                 let result = Self::trace(&ray, scene, 4, &mut rng);
 
-                row[x] += result * (1.0 / samples as f32);
+                row[x] += result * samples_inv;
             }
 
         });
