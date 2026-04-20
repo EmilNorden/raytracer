@@ -5,7 +5,6 @@ use crate::scene::{Intersectable, Intersection};
 
 pub struct BVH {
     nodes: Vec<BVHNode>,
-    bounds: AABB,
 }
 
 #[derive(Default)]
@@ -39,16 +38,11 @@ struct Bin {
 
 impl BVH {
     pub fn new(items: &mut [MeshInstance]) -> Self {
-        let bbox = AABB::compound(items.iter().map(|m| {
-            m.bounds().transform(m.transform())
-        }));
-
         let mut nodes = Vec::new();
         Self::build_node(items, 0, &mut nodes);
 
         Self {
             nodes,
-            bounds: bbox,
         }
     }
 
@@ -63,9 +57,8 @@ impl BVH {
         t_min: f32,
         t_max: f32,
     ) -> Option<(u32, Intersection)> {
-        if self.bounds.intersect_closest(ray, t_max).is_none() {
-            return None;
-        }
+        // The root node's bbox covers the whole scene; traverse_bvh tests it
+        // as the first node, so there is no need for a separate outer check.
         Self::traverse_bvh(&self.nodes, items, ray, t_min, t_max)
     }
 

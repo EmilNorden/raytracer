@@ -34,6 +34,7 @@ struct App {
     render_controller: RenderController,
     latest_rgba: Vec<u8>,
     current_sample: u32,
+    current_frame: u32,
     is_done: bool,
 }
 
@@ -44,8 +45,8 @@ impl App {
                 window.set_title("Pathtracer - done");
             } else {
                 window.set_title(&format!(
-                    "Pathtracer - sample {}/{}",
-                    self.current_sample, self.total_samples
+                    "Pathtracer - sample {}/{} - frame {}",
+                    self.current_sample, self.total_samples, self.current_frame
                 ));
             }
         }
@@ -54,6 +55,7 @@ impl App {
     fn pull_render_updates(&mut self) {
         if let Some(update) = self.render_controller.latest_update() {
             self.current_sample = update.sample;
+            self.current_frame = update.frame;
             self.latest_rgba = update.rgba;
 
             if update.is_done && !self.is_done {
@@ -185,6 +187,7 @@ fn main() {
         render_controller,
         latest_rgba: vec![0; (width * height * 4) as usize],
         current_sample: 0,
+        current_frame: 0,
         is_done: false,
     };
 

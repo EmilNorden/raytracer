@@ -66,11 +66,23 @@ impl Material {
     pub fn color(&self) -> Vector3<f32> { self.color }
 
     pub fn roughness(&self, tex_coords: Vector2<f32>) -> f32 {
-        self.metallic_roughness_texture.as_ref().map(|t| t.sample_channel(tex_coords.x, tex_coords.y, Channel::G)).unwrap_or(self.roughness)
+        self.roughness_metallic(tex_coords).0
     }
 
     pub fn metallicness(&self, tex_coords: Vector2<f32>) -> f32 {
-        self.metallic_roughness_texture.as_ref().map(|t| t.sample_channel(tex_coords.x, tex_coords.y, Channel::B)).unwrap_or(self.metallic)
+        self.roughness_metallic(tex_coords).1
+    }
+
+    /// Sample both roughness (G channel) and metallicness (B channel) in one
+    /// texture lookup instead of two separate calls.
+    fn roughness_metallic(&self, tex_coords: Vector2<f32>) -> (f32, f32) {
+        if let Some(t) = &self.metallic_roughness_texture {
+            let roughness = t.sample_channel(tex_coords.x, tex_coords.y, Channel::G);
+            let metallic  = t.sample_channel(tex_coords.x, tex_coords.y, Channel::B);
+            (roughness, metallic)
+        } else {
+            (self.roughness, self.metallic)
+        }
     }
 
     pub fn apply_normal_map(&self, normal: Vector3<f32>, tangent: Vector4<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
@@ -261,6 +273,7 @@ impl Material {
 
         if rng.random::<f32>() < specular_prob {
             let h = self.sample_ggx_half_vector(&n, alpha, rng);
+            // ...existing specular path...
             let v_dot_h = v.dot(&h).max(0.0);
             if v_dot_h <= 1e-6 {
                 return BsdfSample {
@@ -318,7 +331,8 @@ impl Material {
             };
         }
 
-        let kd = 1.0 - self.metallicness(tex_coords);
+        // Fetch metallic once for the diffuse branch (alpha already computed above)
+        let kd = 1.0 - self.roughness_metallic(tex_coords).1;
         let bsdf_value = albedo * (kd / PI);
         let pdf_diffuse = n_dot_l / PI;
 
@@ -381,26 +395,32 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
             return Vector3::zeros();
         }
 
-        let alpha = self.alpha(tex_coords);
+        let (alpha, metallic) = self.alpha_and_metallic(tex_coords);
         let f0 = self.f0_from_albedo(albedo, tex_coords);
 
         let d = Self::ggx_ndf(n_dot_h, alpha);
         let g = Self::smith_geometry(n_dot_v, n_dot_l, alpha);
         let f = Self::schlick_fresnel(v_dot_h, f0);
         let specular = f * (d * g / (4.0 * n_dot_v * n_dot_l + 1e-6));
-        let diffuse = albedo * ((1.0 - self.metallicness(tex_coords)) / PI);
+        let diffuse = albedo * ((1.0 - metallic) / PI);
 
         diffuse + specular
     }
 
     fn alpha(&self, tex_coords: Vector2<f32>) -> f32 {
-        let roughness = self.roughness(tex_coords).clamp(0.02, 1.0);
+        let roughness = self.roughness_metallic(tex_coords).0.clamp(0.02, 1.0);
         (roughness * roughness).max(1e-4)
     }
 
+    fn alpha_and_metallic(&self, tex_coords: Vector2<f32>) -> (f32, f32) {
+        let (r, m) = self.roughness_metallic(tex_coords);
+        let roughness = r.clamp(0.02, 1.0);
+        ((roughness * roughness).max(1e-4), m)
+    }
+
     fn f0_from_albedo(&self, albedo: &Vector3<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
-        let dielectric_f0 = Vector3::new(0.04, 0.04, 0.04);
-        dielectric_f0 + (albedo - dielectric_f0) * self.metallicness(tex_coords)
+        // self.f0 is the dielectric base (0.04, 0.04, 0.04); reuse the cached field
+        self.f0 + (albedo - self.f0) * self.metallicness(tex_coords)
     }
 
     fn specular_sampling_probability(&self, f0: &Vector3<f32>) -> f32 {
@@ -504,7 +524,10 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
     }
 
     fn schlick_fresnel(cos_theta: f32, f0: Vector3<f32>) -> Vector3<f32> {
-        f0 + (Vector3::new(1.0, 1.0, 1.0) - f0) * (1.0 - cos_theta).powf(5.0)
+        let x = 1.0 - cos_theta;
+        let x2 = x * x;
+        let x5 = x2 * x2 * x;
+        f0 + (Vector3::new(1.0, 1.0, 1.0) - f0) * x5
     }
 }
 

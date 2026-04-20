@@ -17,6 +17,7 @@ pub enum RenderNotification {
 }
 
 pub struct RenderUpdate {
+    pub frame: u32,
     pub sample: u32,
     pub rgba: Vec<u8>,
     pub is_done: bool,
@@ -78,6 +79,7 @@ impl RenderController {
                     };
 
                     let update = RenderUpdate {
+                        frame: frame_index,
                         sample,
                         rgba,
                         is_done,

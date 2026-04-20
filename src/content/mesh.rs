@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use nalgebra::{Point3, Vector2, Vector3, Vector4};
+use nalgebra::{Matrix3, Point3, Vector2, Vector3, Vector4};
 use crate::acceleration::bounds::AABB;
 use crate::acceleration::kdtree::KDTree;
 use crate::content::triangle::{Triangle, IntersectTriangle, Vertex};
@@ -93,20 +93,21 @@ impl MeshData {
     }
 }
 
-fn transform_normal_and_tangent(
-    transform: &nalgebra::Matrix4<f32>,
-    normal: Vector3<f32>,
-    tangent: Vector4<f32>,
-) -> (Vector3<f32>, Vector4<f32>) {
-    let linear = transform.fixed_view::<3, 3>(0, 0).into_owned();
-    let normal_matrix = transform
+fn compute_normal_matrix(transform: &nalgebra::Matrix4<f32>) -> Matrix3<f32> {
+    transform
         .fixed_view::<3, 3>(0, 0)
         .into_owned()
         .try_inverse()
-        .unwrap()
-        .transpose();
-    let orientation_sign = if linear.determinant() < 0.0 { -1.0 } else { 1.0 };
+        .unwrap_or_else(Matrix3::identity)
+        .transpose()
+}
 
+fn transform_normal_and_tangent_with_cached(
+    normal_matrix: &Matrix3<f32>,
+    orientation_sign: f32,
+    normal: Vector3<f32>,
+    tangent: Vector4<f32>,
+) -> (Vector3<f32>, Vector4<f32>) {
     let world_normal = (normal_matrix * normal).normalize();
     let world_tangent_xyz = normal_matrix * tangent.xyz();
     let world_tangent = if world_tangent_xyz.norm_squared() <= 1e-12 {
@@ -127,20 +128,31 @@ pub struct MeshInstance {
     position: Point3<f32>,
     transform: nalgebra::Matrix4<f32>,
     inverse_transform: nalgebra::Matrix4<f32>,
+    /// Precomputed inverse-transpose of the upper-left 3×3 of `transform`,
+    /// used to transform normals/tangents without a per-hit matrix inversion.
+    normal_matrix: Matrix3<f32>,
+    /// +1 or -1 depending on whether the transform flips orientation (det < 0).
+    orientation_sign: f32,
 }
 
 impl MeshInstance {
     pub fn new(mesh_index: usize, data: Arc<MeshData>, position: Point3<f32>, transform: nalgebra::Matrix4<f32>) -> Self {
+        let normal_matrix = compute_normal_matrix(&transform);
+        let orientation_sign = if transform.fixed_view::<3, 3>(0, 0).into_owned().determinant() < 0.0 { -1.0 } else { 1.0 };
         Self {
             mesh_index,
             data,
             position,
             transform,
-            inverse_transform: transform.try_inverse().unwrap()
+            inverse_transform: transform.try_inverse().unwrap(),
+            normal_matrix,
+            orientation_sign,
         }
     }
-    
+
     pub fn update_transform(&mut self, transform: nalgebra::Matrix4<f32>) {
+        self.normal_matrix = compute_normal_matrix(&transform);
+        self.orientation_sign = if transform.fixed_view::<3, 3>(0, 0).into_owned().determinant() < 0.0 { -1.0 } else { 1.0 };
         self.transform = transform;
         self.inverse_transform = transform.try_inverse().unwrap();
     }
@@ -177,7 +189,12 @@ impl Intersectable for MeshInstance {
         let object_space_ray = ray.transform(self.inverse_transform);
 
         self.data.intersect(&object_space_ray, t_min, t_max).map(|x| {
-            let (normal, tangent) = transform_normal_and_tangent(&self.transform, x.normal, x.tangent);
+            let (normal, tangent) = transform_normal_and_tangent_with_cached(
+                &self.normal_matrix,
+                self.orientation_sign,
+                x.normal,
+                x.tangent,
+            );
             Intersection {
                 dist: x.dist,
                 tex_coord: x.tex_coord,

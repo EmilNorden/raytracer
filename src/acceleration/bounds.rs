@@ -103,24 +103,24 @@ impl AABB {
         let mut tmin = 0.0f32;
         let mut tmax = max_t;
 
+        let origin = ray.origin();
+        let dir = ray.direction();
+        let inv = ray.direction_inv();
+
         // Slab test on each axis, with explicit handling for parallel rays.
         for axis in 0..3 {
-            let origin = ray.origin()[axis];
-            let dir = ray.direction()[axis];
-            let bmin = self.min[axis];
-            let bmax = self.max[axis];
-
-            if dir.abs() < 1e-8 {
+            let d = dir[axis];
+            if d.abs() < 1e-8 {
                 // Parallel to slab: if outside the slab, no hit.
-                if origin < bmin || origin > bmax {
+                if origin[axis] < self.min[axis] || origin[axis] > self.max[axis] {
                     return None;
                 }
                 continue;
             }
 
-            let inv_dir = 1.0 / dir;
-            let mut t1 = (bmin - origin) * inv_dir;
-            let mut t2 = (bmax - origin) * inv_dir;
+            let inv_dir = inv[axis];
+            let mut t1 = (self.min[axis] - origin[axis]) * inv_dir;
+            let mut t2 = (self.max[axis] - origin[axis]) * inv_dir;
             if t1 > t2 {
                 std::mem::swap(&mut t1, &mut t2);
             }

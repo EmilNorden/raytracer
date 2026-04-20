@@ -334,7 +334,6 @@ impl SceneLoader for GltfLoader {
             let mut meshes = Vec::new();
             let node_graph = Self::load_node_graph(&scene, &buffers, &mut cameras, &mut lights, &mut meshes, parent_folder, document.meshes().len(), document.materials().len(), options)?;
             let animations = Self::load_animations(&document, &buffers)?;
-            println!("Loaded scene with {} meshes, {} cameras, {} lights", meshes.len(), cameras.len(), lights.len());
 
             Ok((Scene::new(cameras, meshes, lights), AnimationController::new(node_graph, animations)))
         }

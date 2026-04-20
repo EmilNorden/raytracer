@@ -30,6 +30,7 @@ impl Scene {
 
         let bvh = BVH::new(&mut meshes);
 
+        println!("Initialized scene with {} meshes, {} cameras, {} lights", meshes.len(), cameras.len(), lights.len());
 
         Self {
             cameras,
