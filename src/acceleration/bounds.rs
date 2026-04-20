@@ -107,6 +107,7 @@ impl AABB {
         for axis in 0..3 {
             let origin = ray.origin()[axis];
             let dir = ray.direction()[axis];
+            let inv_dir = ray.direction_inv()[axis];
             let bmin = self.min[axis];
             let bmax = self.max[axis];
 
@@ -118,7 +119,6 @@ impl AABB {
                 continue;
             }
 
-            let inv_dir = 1.0 / dir;
             let mut t1 = (bmin - origin) * inv_dir;
             let mut t2 = (bmax - origin) * inv_dir;
             if t1 > t2 {
