@@ -5,17 +5,6 @@ pub struct StaticStack<T, const N: usize> {
 }
 
 impl<T, const N: usize> StaticStack<T, N>
-where T: Default + Copy
-{
-    pub fn new() -> Self {
-        Self {
-            items: [T::default(); N],
-            size: 0,
-        }
-    }
-}
-
-impl<T, const N: usize> StaticStack<T, N>
 where T: Copy
 {
     pub fn new_with_default(default: T) -> Self {
