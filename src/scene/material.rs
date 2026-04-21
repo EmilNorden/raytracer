@@ -18,7 +18,6 @@ pub struct Material {
     normal_scale: f32,
     emissive: Vector3<f32>,
     roughness: f32,
-    f0: Vector3<f32>,
 
     /*
     metallic is a scalar value in
@@ -56,7 +55,6 @@ impl Material {
             normal_scale,
             emissive,
             roughness,
-            f0: Vector3::new(0.04, 0.04, 0.04),  // Standard dielectric F0
             metallic,
             transmission_factor,
             ior,
