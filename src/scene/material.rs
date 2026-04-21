@@ -35,6 +35,40 @@ pub struct Material {
     ior: f32,                  // Index of refraction (1.5 for glass, 1.33 for water)
 }
 
+pub struct CachedTextureLookups<'a> {
+    material: &'a Material,
+    tex_coords: Vector2<f32>,
+    albedo: Vector3<f32>,
+    emissive: Option<Vector3<f32>>,
+    metallic_roughness: Option<(f32, f32)>,
+}
+
+impl<'a> CachedTextureLookups<'a> {
+    pub fn new(material: &'a Material, tex_coords: Vector2<f32>) -> Self {
+        let albedo = material.sample_color(tex_coords.x, tex_coords.y);
+        Self {
+            material,
+            tex_coords,
+            albedo,
+            emissive: None,
+            metallic_roughness: None,
+        }
+    }
+
+    pub fn albedo(&self) -> Vector3<f32> { self.albedo }
+    pub fn emissive(&mut self) -> Vector3<f32> {
+        *self.emissive.get_or_insert_with(|| self.material.sample_emissive(self.tex_coords.x, self.tex_coords.y))
+    }
+    pub fn metallic(&mut self) -> f32 {
+        self.metallic_roughness.get_or_insert_with(|| self.material.sample_metallic_roughness(self.tex_coords)).0
+    }
+    pub fn roughness(&mut self) -> f32 {
+
+        self.metallic_roughness.get_or_insert_with(|| self.material.sample_metallic_roughness(self.tex_coords)).1
+    }
+}
+
+
 pub struct BsdfSample {
     pub direction: Vector3<f32>,
     pub bsdf_value: Vector3<f32>,
@@ -61,14 +95,11 @@ impl Material {
         }
     }
 
-    pub fn color(&self) -> Vector3<f32> { self.color }
-
-    pub fn roughness(&self, tex_coords: Vector2<f32>) -> f32 {
-        self.metallic_roughness_texture.as_ref().map(|t| t.sample_channel(tex_coords.x, tex_coords.y, Channel::G)).unwrap_or(self.roughness)
-    }
-
-    pub fn metallicness(&self, tex_coords: Vector2<f32>) -> f32 {
-        self.metallic_roughness_texture.as_ref().map(|t| t.sample_channel(tex_coords.x, tex_coords.y, Channel::B)).unwrap_or(self.metallic)
+    pub fn sample_metallic_roughness(&self, tex_coords: Vector2<f32>) -> (f32, f32) {
+        self.metallic_roughness_texture.as_ref().map(|t| {
+            let color = t.sample_color(tex_coords.x, tex_coords.y);
+            (color.z, color.y)
+        }).unwrap_or((self.metallic, self.roughness))
     }
 
     pub fn apply_normal_map(&self, normal: Vector3<f32>, tangent: Vector4<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
@@ -211,7 +242,7 @@ impl Material {
     /// Note: `bsdf_value` here is the contribution of the sampled lobe, not a
     /// full evaluation of all lobes. That is intentional because `pdf` is also
     /// branch-conditioned (e.g. `specular_prob * pdf_spec`).
-    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, tex_coords: Vector2<f32>, rng: &mut impl Rng) -> BsdfSample {
+    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, cached_textures: &mut CachedTextureLookups, rng: &mut impl Rng) -> BsdfSample {
         let n = normal;
         let v = (-incoming).normalize();
         let n_dot_v = n.dot(&v).max(0.0);
@@ -253,8 +284,8 @@ impl Material {
             };
         }
 
-        let alpha = self.alpha(tex_coords);
-        let f0 = self.f0_from_albedo(&albedo, tex_coords);
+        let alpha = self.alpha(cached_textures);
+        let f0 = self.f0_from_albedo(&albedo, cached_textures);
         let specular_prob = self.specular_sampling_probability(&f0);
 
         if rng.random::<f32>() < specular_prob {
@@ -316,7 +347,7 @@ impl Material {
             };
         }
 
-        let kd = 1.0 - self.metallicness(tex_coords);
+        let kd = 1.0 - cached_textures.metallic();
         let bsdf_value = albedo * (kd / PI);
         let pdf_diffuse = n_dot_l / PI;
 
@@ -369,7 +400,7 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
     ///
     /// This is what you want when the outgoing direction is already known,
     /// for example during next-event estimation / direct light sampling.
-    pub fn evaluate_bsdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
+    pub fn evaluate_bsdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>, cached_textures: &mut CachedTextureLookups) -> Vector3<f32> {
         let half_vector = (light_dir + view_dir).normalize();
         let n_dot_l = normal.dot(&light_dir).max(0.0);
         let n_dot_v = normal.dot(&view_dir).max(0.0);
@@ -379,26 +410,26 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
             return Vector3::zeros();
         }
 
-        let alpha = self.alpha(tex_coords);
-        let f0 = self.f0_from_albedo(albedo, tex_coords);
+        let alpha = self.alpha(cached_textures);
+        let f0 = self.f0_from_albedo(albedo, cached_textures);
 
         let d = Self::ggx_ndf(n_dot_h, alpha);
         let g = Self::smith_geometry(n_dot_v, n_dot_l, alpha);
         let f = Self::schlick_fresnel(v_dot_h, f0);
         let specular = f * (d * g / (4.0 * n_dot_v * n_dot_l + 1e-6));
-        let diffuse = albedo * ((1.0 - self.metallicness(tex_coords)) / PI);
+        let diffuse = albedo * ((1.0 - cached_textures.metallic()) / PI);
 
         diffuse + specular
     }
 
-    fn alpha(&self, tex_coords: Vector2<f32>) -> f32 {
-        let roughness = self.roughness(tex_coords).clamp(0.02, 1.0);
+    fn alpha(&self, cached_textures: &mut CachedTextureLookups) -> f32 {
+        let roughness = cached_textures.roughness().clamp(0.02, 1.0);
         (roughness * roughness).max(1e-4)
     }
 
-    fn f0_from_albedo(&self, albedo: &Vector3<f32>, tex_coords: Vector2<f32>) -> Vector3<f32> {
+    fn f0_from_albedo(&self, albedo: &Vector3<f32>, cached_textures: &mut CachedTextureLookups) -> Vector3<f32> {
         let dielectric_f0 = Vector3::new(0.04, 0.04, 0.04);
-        dielectric_f0 + (albedo - dielectric_f0) * self.metallicness(tex_coords)
+        dielectric_f0 + (albedo - dielectric_f0) * cached_textures.metallic()
     }
 
     fn specular_sampling_probability(&self, f0: &Vector3<f32>) -> f32 {

@@ -7,6 +7,7 @@ use crate::scene::ShadingContext;
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use rayon::prelude::*;
+use crate::scene::material::CachedTextureLookups;
 
 pub struct PathTracingIntegrator {}
 
@@ -29,8 +30,8 @@ impl PathTracingIntegrator {
         let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
         let v = hit.intersection.tex_coord.y.rem_euclid(1.0);
         let tex_coords = Vector2::new(u, v);
-        let emissive = hit.material.sample_emissive(u, v);
-        let albedo = hit.material.sample_color(u, v);
+        let mut cached_textures = CachedTextureLookups::new(&hit.material, tex_coords);
+        let albedo = cached_textures.albedo();
         let hit_point = ray.origin() + ray.direction() * hit.intersection.dist;
         let surface_point = hit_point + hit.intersection.normal * 0.001; // Offset along normal, not ray direction
 
@@ -55,7 +56,7 @@ impl PathTracingIntegrator {
                     let view_dir = -ray.direction();
                     let brdf =
                         hit.material
-                            .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, tex_coords);
+                            .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, &mut cached_textures);
                     direct_light = (light_emissive * (cos_theta_light / (distance_sq * light_pdf)))
                         .component_mul(&brdf)
                         * cos_theta;
@@ -66,7 +67,7 @@ impl PathTracingIntegrator {
         // Indirect lighting: BSDF sampling for next bounce
         let sample =
             hit.material
-                .sample_bsdf(ray.direction(), normal, albedo, tex_coords, rng);
+                .sample_bsdf(ray.direction(), normal, albedo, &mut cached_textures, rng);
 
         // Offset based on outgoing hemisphere relative to the geometric normal.
         // This works for reflection and for both entering/exiting transmission.
@@ -110,6 +111,8 @@ impl PathTracingIntegrator {
         } else {
             Vector3::zeros()
         };
+
+        let emissive = cached_textures.emissive();
 
         // Combine: emissive + direct*albedo + indirect*albedo
         // Direct light gets modulated by albedo here
