@@ -324,8 +324,34 @@ mod tests {
     use nalgebra::Vector2;
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
-    use crate::content::triangle::Vertex;
+    use crate::content::triangle::{IntersectTriangle, Vertex};
     use super::*;
+
+    fn build_triangle_data(triangles: &[Triangle]) -> (Vec<Vertex>, Vec<[u32; 3]>, Vec<IntersectTriangle>) {
+        let mut vertices = Vec::with_capacity(triangles.len() * 3);
+        let mut tri_indices = Vec::with_capacity(triangles.len());
+        let mut intersect_triangles = Vec::with_capacity(triangles.len());
+
+        for triangle in triangles {
+            let base = vertices.len() as u32;
+            let v0 = triangle.v0();
+            let v1 = triangle.v1();
+            let v2 = triangle.v2();
+
+            vertices.push(v0);
+            vertices.push(v1);
+            vertices.push(v2);
+            tri_indices.push([base, base + 1, base + 2]);
+
+            intersect_triangles.push(IntersectTriangle {
+                v0: v0.position,
+                edge1: v1.position - v0.position,
+                edge2: v2.position - v0.position,
+            });
+        }
+
+        (vertices, tri_indices, intersect_triangles)
+    }
 
     fn make_large_straddling_triangle() -> Triangle {
         Triangle::new([
@@ -380,15 +406,15 @@ mod tests {
         ])
     }
 
-    fn brute_force_intersect(triangles: &[Triangle], ray: &Ray) -> Option<TriangleIntersection> {
+    fn brute_force_intersect(triangles: &[IntersectTriangle], ray: &Ray) -> Option<(usize, TriangleIntersection)> {
         let mut closest = None;
         let mut closest_dist = f32::INFINITY;
 
-        for triangle in triangles {
+        for (idx, triangle) in triangles.iter().enumerate() {
             if let Some(hit) = triangle.intersect(ray) {
                 if hit.dist < closest_dist {
                     closest_dist = hit.dist;
-                    closest = Some(hit);
+                    closest = Some((idx, hit));
                 }
             }
         }
@@ -399,7 +425,8 @@ mod tests {
     #[test]
     fn build_does_not_duplicate_straddling_triangles() {
         let triangles = vec![make_large_straddling_triangle(); 1024];
-        let tree = KDTree::new(triangles.clone());
+        let (vertices, tri_indices, _) = build_triangle_data(&triangles);
+        let tree = KDTree::new(&vertices, &tri_indices);
 
         assert_eq!(tree.triangle_count() as usize, triangles.len());
     }
@@ -413,7 +440,8 @@ mod tests {
             triangles.push(make_random_triangle(&mut rng));
         }
 
-        let tree = KDTree::new(triangles.clone());
+        let (vertices, tri_indices, intersect_triangles) = build_triangle_data(&triangles);
+        let tree = KDTree::new(&vertices, &tri_indices);
 
         for ray_index in 0..5000 {
             let origin = Point3::new(
@@ -430,12 +458,12 @@ mod tests {
             direction = direction.normalize();
 
             let ray = Ray::new(origin, direction);
-            let kd_hit = tree.intersects(&ray);
-            let brute_hit = brute_force_intersect(&triangles, &ray);
+            let kd_hit = tree.intersects(&ray, &intersect_triangles);
+            let brute_hit = brute_force_intersect(&intersect_triangles, &ray);
 
             match (kd_hit, brute_hit) {
                 (None, None) => {}
-                (Some(kd), Some(brute)) => {
+                (Some((_, kd)), Some((_, brute))) => {
                     assert!(
                         (kd.dist - brute.dist).abs() <= 1e-4,
                         "distance mismatch at ray {}: kd={} brute={}",

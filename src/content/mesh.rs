@@ -222,20 +222,15 @@ mod tests {
 
     fn create_test_mesh() -> Arc<MeshData> {
         let tangent = Vector4::new(1.0, 0.0, 0.0, 1.0);
-        let triangles = vec![
-            Triangle::new([
-                Vertex { position: Point3::new( -1.0, 1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
-                Vertex { position: Point3::new( 1.0, 1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
-                Vertex { position: Point3::new( -1.0, -1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent }
-            ]),
-            Triangle::new([
-                Vertex { position: Point3::new( 1.0, 1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
-                Vertex { position: Point3::new( 1.0, -1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
-                Vertex { position: Point3::new( -1.0, -1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent }
-            ]),
+        let vertices = vec![
+            Vertex { position: Point3::new(-1.0, 1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
+            Vertex { position: Point3::new(1.0, 1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
+            Vertex { position: Point3::new(-1.0, -1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
+            Vertex { position: Point3::new(1.0, -1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
         ];
+        let tri_indices = vec![[0, 1, 2], [1, 3, 2]];
         let material = Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.5);
-        Arc::new(MeshData::new(triangles, material))
+        Arc::new(MeshData::new(vertices, tri_indices, material))
     }
     #[test]
     fn intersect_should_return_distance_in_world_space() {
@@ -298,7 +293,7 @@ mod tests {
 
     #[test]
     fn intersect_should_interpolate_tangent_across_triangle() {
-        let triangle = Triangle::new([
+        let triangle = [
             Vertex {
                 position: Point3::new(0.0, 0.0, 0.0),
                 uv: Vector2::new(0.0, 0.0),
@@ -317,12 +312,12 @@ mod tests {
                 normal: Vector3::new(0.0, 0.0, 1.0),
                 tangent: Vector4::new(1.0, 1.0, 0.0, 1.0),
             },
-        ]);
+        ];
 
         let material = Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.5);
         let mesh = MeshInstance::new(
             0,
-            Arc::new(MeshData::new(vec![triangle], material)),
+            Arc::new(MeshData::new(triangle.to_vec(), vec![[0, 1, 2]], material)),
             Point3::default(),
             Matrix4::identity(),
         );

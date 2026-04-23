@@ -343,14 +343,14 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand::rngs::StdRng;
     use crate::content::mesh::{MeshData, MeshInstance};
-    use crate::content::triangle::{Triangle, Vertex};
+    use crate::content::triangle::Vertex;
     use crate::core::Ray;
     use crate::scene::{Intersectable, Intersection};
     use crate::scene::material::Material;
     use super::BVH;
 
-    fn make_triangle() -> Triangle {
-        Triangle::new([
+    fn make_triangle_vertices() -> Vec<Vertex> {
+        vec![
             Vertex {
                 position: Point3::new(-1.0, -1.0, 0.0),
                 normal: Vector3::new(0.0, 0.0, 1.0),
@@ -369,7 +369,7 @@ mod tests {
                 tangent: nalgebra::Vector4::new(1.0, 0.0, 0.0, 1.0),
                 uv: Vector2::new(0.0, 1.0),
             },
-        ])
+        ]
     }
 
     fn make_mesh(mesh_index: usize, translation: Vector3<f32>) -> MeshInstance {
@@ -387,7 +387,7 @@ mod tests {
             1.5,
         );
 
-        let data = Arc::new(MeshData::new(vec![make_triangle()], material));
+        let data = Arc::new(MeshData::new(make_triangle_vertices(), vec![[0, 1, 2]], material));
         let transform = Matrix4::new_translation(&translation);
 
         MeshInstance::new(mesh_index, data, Point3::new(0.0, 0.0, 0.0), transform)
