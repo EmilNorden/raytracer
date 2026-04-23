@@ -2,7 +2,7 @@ use std::f32::consts::PI;
 use nalgebra::{Matrix3, Vector2, Vector3, Vector4};
 use rand::Rng;
 use crate::scene::coordinate_system::CoordinateSystem;
-use crate::scene::texture::{Channel, Texture};
+use crate::scene::texture::{Texture};
 
 pub struct Material {
     /*

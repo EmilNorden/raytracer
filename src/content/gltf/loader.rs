@@ -1,27 +1,25 @@
-
-use gltf::khr_lights_punctual::Kind;
-use std::path::Path;
-use gltf::camera::Projection;
-use nalgebra::{Matrix4, Point3, Quaternion, UnitQuaternion, Vector2, Vector3, Vector4};
-use crate::camera::perspective_camera::PerspectiveCamera;
-use crate::content::scene_loader::{SceneError, SceneLoader};
-use crate::scene::scene::Scene;
-use std::sync::Arc;
-use gltf::animation::Interpolation;
-use gltf::animation::util::{ReadOutputs, Rotations};
-use gltf::buffer::Data;
-use gltf::mesh::Mode;
-use gltf::Node;
-use gltf::scene::iter;
-use crate::animation::{Animation, AnimationChannel, AnimationOutputs};
 use crate::animation::controller::AnimationController;
+use crate::animation::{Animation, AnimationChannel, AnimationOutputs};
+use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::gltf::material::create_material;
-use crate::content::mesh::{MeshInstance, MeshData};
-use crate::content::triangle::{Triangle, Vertex};
+use crate::content::mesh::{MeshData, MeshInstance};
+use crate::content::scene_loader::{SceneError, SceneLoader};
+use crate::content::triangle::Vertex;
 use crate::options::RenderOptions;
 use crate::scene::light::{LightSource, PointLight};
 use crate::scene::material::Material;
 use crate::scene::node_graph::{NodeGraph, NodeTransform, SceneNode};
+use crate::scene::scene::Scene;
+use gltf::animation::util::{ReadOutputs, Rotations};
+use gltf::animation::Interpolation;
+use gltf::buffer::Data;
+use gltf::camera::Projection;
+use gltf::khr_lights_punctual::Kind;
+use gltf::mesh::Mode;
+use gltf::Node;
+use nalgebra::{Matrix4, Point3, Quaternion, UnitQuaternion, Vector2, Vector3, Vector4};
+use std::path::Path;
+use std::sync::Arc;
 
 pub struct GltfLoader{}
 
@@ -197,7 +195,7 @@ impl GltfLoader {
 
             for data in mesh_data {
                 mesh_indices.push(meshes.len());
-                meshes.push(MeshInstance::new(mesh.index(), data, Self::extract_translation(&transform), transform));
+                meshes.push(MeshInstance::new(data, transform));
             }
         }
 
@@ -240,7 +238,6 @@ impl GltfLoader {
 
         Ok(SceneNode {
             index: node.index(),
-            name: node.name().map(|name| name.to_string()),
             local_transform: NodeTransform::new(
                 Vector3::new(translation[0], translation[1], translation[2]),
                 UnitQuaternion::from_quaternion(Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2])),
@@ -312,7 +309,7 @@ impl GltfLoader {
                 channels.push(AnimationChannel::new(node.index(), timestamps, outputs, interpolation));
             }
 
-            animations.push(Animation::new(animation.name().unwrap_or("Unnamed").to_string(), channels));
+            animations.push(Animation::new(channels));
 
         };
 
@@ -325,7 +322,7 @@ impl SceneLoader for GltfLoader {
         let parent_folder = path.parent().unwrap();
 
         println!("Loading GLTF file..");
-        let (document, buffers , images) = gltf::import(path)?;
+        let (document, buffers , _images) = gltf::import(path)?;
 
         if let Some(scene) = document.default_scene() {
 
@@ -334,6 +331,9 @@ impl SceneLoader for GltfLoader {
             let mut meshes = Vec::new();
             let node_graph = Self::load_node_graph(&scene, &buffers, &mut cameras, &mut lights, &mut meshes, parent_folder, document.meshes().len(), document.materials().len(), options)?;
             let animations = Self::load_animations(&document, &buffers)?;
+
+            if cameras.is_empty() { return Err(SceneError::NoCameras.into()); }
+
             println!("Loaded scene with {} meshes, {} cameras, {} lights", meshes.len(), cameras.len(), lights.len());
 
             Ok((Scene::new(cameras, meshes, lights), AnimationController::new(node_graph, animations)))

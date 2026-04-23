@@ -1,4 +1,4 @@
-use nalgebra::{Matrix4, Quaternion, UnitQuaternion, Vector3};
+use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 
 /// Decomposed TRS transform — the native representation for animation.
 #[derive(Debug, Clone)]
@@ -37,7 +37,6 @@ impl Default for NodeTransform {
 pub struct SceneNode {
     /// GLTF node index (stable across the lifetime of the document).
     pub index: usize,
-    pub name: Option<String>,
     /// Local TRS transform relative to the parent.
     pub local_transform: NodeTransform,
     /// Indices into the scene's mesh list, if this node has a mesh.
@@ -47,20 +46,6 @@ pub struct SceneNode {
     /// Index into the scene's light list, if this node has a light.
     pub light_index: Option<usize>,
     pub children: Vec<SceneNode>,
-}
-
-impl SceneNode {
-    pub fn new(
-        index: usize,
-        name: Option<String>,
-        local_transform: NodeTransform,
-        mesh_indices: Vec<usize>,
-        camera_index: Option<usize>,
-        light_index: Option<usize>,
-        children: Vec<SceneNode>,
-    ) -> Self {
-        Self { index, name, local_transform, mesh_indices, camera_index, light_index, children }
-    }
 }
 
 /// The full scene-graph extracted from the GLTF default scene.
@@ -75,12 +60,14 @@ impl NodeGraph {
         Self { roots }
     }
 
+    #[allow(dead_code)]
     /// Iterate every node in depth-first order.
     pub fn iter(&self) -> impl Iterator<Item = &SceneNode> {
         NodeIter { stack: self.roots.iter().collect() }
     }
 }
 
+#[allow(dead_code)]
 struct NodeIter<'a> {
     stack: Vec<&'a SceneNode>,
 }

@@ -3,14 +3,12 @@ pub mod controller;
 use nalgebra::{Point3, UnitQuaternion, Vector3};
 
 pub struct Animation {
-    name: String,
     channels: Vec<AnimationChannel>,
 }
 
 impl Animation {
-    pub fn new(name: String, channels: Vec<AnimationChannel>) -> Self {
+    pub fn new(channels: Vec<AnimationChannel>) -> Self {
         Self {
-            name,
             channels,
         }
     }

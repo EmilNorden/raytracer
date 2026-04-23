@@ -1,6 +1,6 @@
-use nalgebra::{Point3, Vector3};
+use nalgebra::{Point3};
 use crate::acceleration::bounds::AABB;
-use crate::content::triangle::{Triangle, TriangleIntersection, IntersectTriangle, Vertex};
+use crate::content::triangle::{TriangleIntersection, IntersectTriangle, Vertex};
 use crate::core::Ray;
 use crate::static_stack::StaticStack;
 
@@ -84,16 +84,6 @@ impl KDTree {
 
     pub fn bounds(&self) -> AABB {
         self.bounds
-    }
-    
-    pub fn triangle_count_from_node(&self, node: &TreeNode) -> u32 {
-        node.items.len() as u32 +   
-            node.left.as_ref().map_or(0, |x| self.triangle_count_from_node(x.as_ref())) + 
-            node.right.as_ref().map_or(0, |x| self.triangle_count_from_node(x.as_ref()))
-    }
-    
-    pub fn triangle_count(&self) -> u32 {
-        self.triangle_count_from_node(&self.root)
     }
 
     pub fn intersects(&self, ray: &Ray, triangle_edges: &[IntersectTriangle], ) -> Option<(usize, TriangleIntersection)> {

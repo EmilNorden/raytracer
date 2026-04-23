@@ -1,15 +1,13 @@
-use std::future::ready;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
-use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
-use ffmpeg_cli::{FfmpegBuilder, File, Parameter};
 use crate::animation::controller::{AnimationController, AnimationState};
 use crate::frame::Frame;
 use crate::integrator::integrator::{Integrator, IntegratorImpl};
 use crate::options::RenderOptions;
 use crate::scene::scene::Scene;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 use winit::event_loop::EventLoopProxy;
 
 pub enum RenderNotification {
@@ -98,7 +96,7 @@ impl RenderController {
                 }
 
                 if stop_video {
-                    let status = Command::new("ffmpeg")
+                    let _ = Command::new("ffmpeg")
                         .current_dir("output") // 👈 only ffmpeg runs here
                         .args([
                             "-framerate", "30",

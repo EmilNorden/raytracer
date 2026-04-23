@@ -20,7 +20,6 @@ impl Integrator for DebugIntegrator {
         let height = frame.height() as usize;
 
         let scanlines = (0..height).into_par_iter().map(|y| {
-            let mut rng = rand::rng();
             let mut pixels = vec![Vector3::new(0.0, 0.0, 0.0); width];
             let v = y as f32 / height as f32;
             for x in 0..width {

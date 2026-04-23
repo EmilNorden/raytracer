@@ -1,23 +1,22 @@
-use std::f32::consts::E;
-use std::path::Path;
+use crate::scene::material::Material;
+use crate::scene::texture::Texture;
 use gltf::image::Source;
 use gltf::material::NormalTexture;
 use gltf::texture;
 use nalgebra::Vector3;
-use crate::scene::material::Material;
-use crate::scene::texture::Texture;
+use std::path::Path;
 
 fn create_texture_internal(texture: &texture::Texture, folder: &Path) -> Texture {
     let source = texture.source();
 
     match source.source() {
         Source::View { .. } => panic!("Unexpected source: view"),
-        Source::Uri { uri, mime_type } => {
+        Source::Uri { uri, mime_type: _mime_type } => {
             let uri = uri.replace("%20", " "); // TODO: Quick fix. Probably have to do proper URL decoding.
             let image_path = folder.join(uri);
             let img = match image::open(&image_path) {
                 Ok(img) => img,
-                Err(e) => panic!("Failed to load image: {}", image_path.display())
+                Err(e) => panic!("Failed to load image {}. Error: {}", image_path.display(), e)
             };
             Texture::new(img.to_rgba8().to_vec(), img.width(), img.height())
         }

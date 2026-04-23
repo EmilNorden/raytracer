@@ -6,6 +6,7 @@ pub struct Texture {
     height: u32,
 }
 
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 pub enum Channel {
     R, G, B
@@ -47,6 +48,7 @@ impl Texture {
         Vector3::new(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
     }
 
+    #[allow(dead_code)]
     pub fn sample_channel(&self, u: f32, v: f32, channel: Channel) -> f32 {
         assert!(u.is_finite(), "u is not finite: {}", u);
         assert!(v.is_finite(), "v is not finite: {}", v);

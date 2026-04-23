@@ -1,18 +1,11 @@
-use nalgebra::{Matrix4, Point3, Vector3};
 use crate::acceleration::bvh::BVH;
-use crate::animation::Animation;
 use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::MeshInstance;
 use crate::core::Ray;
+use crate::scene::light::LightSource;
 use crate::scene::{Intersectable, Shadeable, ShadingContext};
-use crate::scene::light::{LightSource, PointLight};
-use crate::scene::node_graph::NodeGraph;
+use nalgebra::{Point3, Vector3};
 
-pub struct SceneNode {
-    pub transform: Matrix4<f32>,
-    pub meshes: Vec<u32>,
-    pub children: Vec<SceneNode>,
-}
 pub struct Scene {
     cameras : Vec<PerspectiveCamera>,
     meshes: Vec<MeshInstance>,
@@ -59,12 +52,11 @@ impl Scene {
         &mut self.lights
     }
 
-    pub fn intersect(&self, ray: &Ray) -> Option<ShadingContext> {
+    pub fn intersect(&'_ self, ray: &Ray) -> Option<ShadingContext<'_>> {
        self.bvh.intersect(self.meshes.as_slice(), ray).map(|(mesh_index, hit)| {
             ShadingContext {
                 intersection: hit,
                 material: self.meshes[mesh_index as usize].material(),
-                mesh_index: self.meshes[mesh_index as usize].mesh_index(),
             }
         })
     }
@@ -140,9 +132,4 @@ impl Scene {
             .intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max)
             .is_none()
     }
-}
-
-pub struct SceneObject {
-    pub inverse_world: Matrix4<f32>,
-    pub geometry: Box<dyn Intersectable>,
 }

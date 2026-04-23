@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use nalgebra::{Matrix3, Matrix4, Point3, Vector2, Vector3, Vector4};
+use nalgebra::{Matrix3, Matrix4, Vector3, Vector4};
 use crate::acceleration::bounds::AABB;
 use crate::acceleration::kdtree::KDTree;
 use crate::content::triangle::{Triangle, IntersectTriangle, Vertex};
@@ -114,25 +114,21 @@ fn transform_normal_and_tangent(
 
 #[derive(Clone)]
 pub struct MeshInstance {
-    mesh_index: usize,
     data: Arc<MeshData>,
-    position: Point3<f32>,
-    transform: nalgebra::Matrix4<f32>,
-    inverse_transform: nalgebra::Matrix4<f32>,
+    transform: Matrix4<f32>,
+    inverse_transform: Matrix4<f32>,
 
-    normal_matrix: nalgebra::Matrix3<f32>,
+    normal_matrix: Matrix3<f32>,
     orientation_sign: f32,
 }
 
 impl MeshInstance {
-    pub fn new(mesh_index: usize, data: Arc<MeshData>, position: Point3<f32>, transform: Matrix4<f32>) -> Self {
+    pub fn new(data: Arc<MeshData>, transform: Matrix4<f32>) -> Self {
 
         let (normal_matrix, orientation_sign) = Self::calculate_normal_matrix_and_orientation(&transform);
 
         Self {
-            mesh_index,
             data,
-            position,
             transform,
             inverse_transform: transform.try_inverse().unwrap(),
             normal_matrix,
@@ -159,14 +155,6 @@ impl MeshInstance {
         let (normal_matrix, orientation_sign) = Self::calculate_normal_matrix_and_orientation(&transform);
         self.normal_matrix = normal_matrix;
         self.orientation_sign = orientation_sign;
-    }
-
-    pub fn mesh_index(&self) -> usize {
-        self.mesh_index
-    }
-
-    pub fn position(&self) -> Point3<f32> {
-        self.position
     }
     
     pub fn triangle_count(&self) -> usize {
