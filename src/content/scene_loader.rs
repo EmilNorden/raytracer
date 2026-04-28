@@ -1,6 +1,6 @@
 use std::path::Path;
 use crate::animation::controller::AnimationController;
-use crate::RenderOptions;
+use crate::options::RenderOptions;
 use crate::scene::scene::Scene;
 
 #[derive(Debug)]

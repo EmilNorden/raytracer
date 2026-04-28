@@ -86,6 +86,22 @@ impl KDTree {
         self.bounds
     }
 
+    #[cfg(test)]
+    fn triangle_count(&self) -> usize {
+        fn count_node_triangles(node: &TreeNode) -> usize {
+            let mut count = node.items.len();
+            if let Some(left) = &node.left {
+                count += count_node_triangles(left);
+            }
+            if let Some(right) = &node.right {
+                count += count_node_triangles(right);
+            }
+            count
+        }
+
+        count_node_triangles(&self.root)
+    }
+
     pub fn intersects(&self, ray: &Ray, triangle_edges: &[IntersectTriangle], ) -> Option<(usize, TriangleIntersection)> {
 
         let (global_tmin, global_tmax) = if let Some(hit) = self.bounds.intersect(ray) {
@@ -311,10 +327,10 @@ impl TreeNode
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::Vector2;
+    use nalgebra::{Vector2, Vector3};
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
-    use crate::content::triangle::{IntersectTriangle, Vertex};
+    use crate::content::triangle::{IntersectTriangle, Triangle, Vertex};
     use super::*;
 
     fn build_triangle_data(triangles: &[Triangle]) -> (Vec<Vertex>, Vec<[u32; 3]>, Vec<IntersectTriangle>) {

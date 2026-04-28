@@ -372,7 +372,7 @@ mod tests {
         ]
     }
 
-    fn make_mesh(mesh_index: usize, translation: Vector3<f32>) -> MeshInstance {
+    fn make_mesh(translation: Vector3<f32>) -> MeshInstance {
         let material = Material::new(
             Vector3::zeros(),
             None,
@@ -390,7 +390,7 @@ mod tests {
         let data = Arc::new(MeshData::new(make_triangle_vertices(), vec![[0, 1, 2]], material));
         let transform = Matrix4::new_translation(&translation);
 
-        MeshInstance::new(mesh_index, data, Point3::new(0.0, 0.0, 0.0), transform)
+        MeshInstance::new(data, transform)
     }
 
     fn brute_force(
@@ -415,9 +415,9 @@ mod tests {
     #[test]
     fn bvh_matches_bruteforce_for_closest_hit() {
         let mut meshes = vec![
-            make_mesh(0, Vector3::new(0.0, 0.0, 3.0)),
-            make_mesh(1, Vector3::new(0.0, 0.0, 6.0)),
-            make_mesh(2, Vector3::new(2.0, 0.0, 4.0)),
+            make_mesh(Vector3::new(0.0, 0.0, 3.0)),
+            make_mesh(Vector3::new(0.0, 0.0, 6.0)),
+            make_mesh(Vector3::new(2.0, 0.0, 4.0)),
         ];
 
         let bvh = BVH::new(&mut meshes);
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn intersect_with_limits_respects_t_max_for_shadow_segment() {
         let mut meshes = vec![
-            make_mesh(0, Vector3::new(0.0, 0.0, 5.0)),
+            make_mesh(Vector3::new(0.0, 0.0, 5.0)),
         ];
 
         let bvh = BVH::new(&mut meshes);
@@ -463,11 +463,11 @@ mod tests {
     #[test]
     fn bvh_matches_bruteforce_randomized_regression() {
         let mut meshes = vec![
-            make_mesh(0, Vector3::new(-2.0, -1.5, 3.0)),
-            make_mesh(1, Vector3::new(1.5, -0.25, 4.5)),
-            make_mesh(2, Vector3::new(-0.5, 1.75, 6.0)),
-            make_mesh(3, Vector3::new(2.25, 2.0, 8.0)),
-            make_mesh(4, Vector3::new(0.0, 0.0, 10.0)),
+            make_mesh(Vector3::new(-2.0, -1.5, 3.0)),
+            make_mesh(Vector3::new(1.5, -0.25, 4.5)),
+            make_mesh(Vector3::new(-0.5, 1.75, 6.0)),
+            make_mesh(Vector3::new(2.25, 2.0, 8.0)),
+            make_mesh(Vector3::new(0.0, 0.0, 10.0)),
         ];
 
         let bvh = BVH::new(&mut meshes);

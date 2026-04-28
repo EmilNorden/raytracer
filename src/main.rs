@@ -4,26 +4,14 @@ use pixels::{Pixels, SurfaceTexture};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, Size};
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
-use crate::content::gltf::loader::GltfLoader;
-use crate::content::scene_loader::SceneLoader;
-use crate::integrator::integrator::create;
-use crate::options::RenderOptions;
-use crate::render_controller::{RenderController, RenderNotification};
-
-mod core;
-mod camera;
-mod scene;
-mod acceleration;
-mod content;
-mod integrator;
-mod frame;
-mod options;
-mod static_stack;
-mod animation;
-mod render_controller;
+use raytracer::content::gltf::loader::GltfLoader;
+use raytracer::content::scene_loader::SceneLoader;
+use raytracer::integrator::integrator::create;
+use raytracer::options::RenderOptions;
+use raytracer::render_controller::RenderController;
 
 struct App {
     width: u32,
@@ -83,7 +71,7 @@ impl App {
     }
 }
 
-impl ApplicationHandler<RenderNotification> for App {
+impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = Arc::new(
             event_loop
@@ -115,14 +103,6 @@ impl ApplicationHandler<RenderNotification> for App {
         }
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: RenderNotification) {
-        self.pull_render_updates();
-
-        if let Some(window) = self.window.as_ref() {
-            window.request_redraw();
-        }
-    }
-
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
         if self.window.as_ref().map(|w| w.id()) != Some(window_id) {
             return;
@@ -141,7 +121,14 @@ impl ApplicationHandler<RenderNotification> for App {
                 }
             }
             WindowEvent::RedrawRequested => {
+                self.pull_render_updates();
                 self.draw_latest_frame(event_loop);
+
+                if !self.is_done {
+                    if let Some(window) = self.window.as_ref() {
+                        window.request_redraw();
+                    }
+                }
             }
             _ => {}
         }
@@ -169,12 +156,9 @@ fn main() {
     let height = options.resolution.height;
     let total_samples = options.samples;
 
-    let event_loop = EventLoop::<RenderNotification>::with_user_event()
-        .build()
-        .unwrap();
-    let proxy: EventLoopProxy<RenderNotification> = event_loop.create_proxy();
+    let event_loop = EventLoop::new().unwrap();
 
-    let render_controller = RenderController::start(options, scene, animation_controller, integrator, proxy);
+    let render_controller = RenderController::start(options, scene, animation_controller, integrator);
 
     let mut app = App {
         width,

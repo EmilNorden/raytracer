@@ -8,11 +8,6 @@ use std::process::Command;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use winit::event_loop::EventLoopProxy;
-
-pub enum RenderNotification {
-    FrameReady,
-}
 
 pub struct RenderUpdate {
     pub sample: u32,
@@ -38,7 +33,6 @@ impl RenderController {
         mut scene: Scene,
         mut animation_controller: AnimationController,
         integrator: IntegratorImpl,
-        proxy: EventLoopProxy<RenderNotification>,
     ) -> Self {
         let (update_tx, update_rx) = mpsc::channel();
         let (command_tx, command_rx) = mpsc::channel();
@@ -87,8 +81,6 @@ impl RenderController {
                         break;
                     }
 
-                    // Wake the event loop so the UI thread can fetch and present the latest frame.
-                    let _ = proxy.send_event(RenderNotification::FrameReady);
                 }
 
                 if !options.video {

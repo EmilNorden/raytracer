@@ -204,7 +204,7 @@ impl Shadeable for MeshInstance {
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::{Matrix4, Vector4};
+    use nalgebra::{Matrix4, Vector4, Point3, Vector2};
     use crate::content::triangle::Vertex;
     use super::*;
 
@@ -225,7 +225,7 @@ mod tests {
         let mesh_data = create_test_mesh();
 
         let transform = Matrix4::new_scaling(5.0);
-        let mesh = MeshInstance::new(0, mesh_data, Point3::default(), transform);
+        let mesh = MeshInstance::new(mesh_data, transform);
 
         let ray = Ray::new(Point3::new(0.0, 0.0, 10.0), Vector3::new(0.0, 0.0, -1.0));
 
@@ -237,7 +237,7 @@ mod tests {
     fn intersect_should_return_normal_in_world_space_for_identity_mesh() {
         let mesh_data = create_test_mesh();
 
-        let identity_mesh = MeshInstance::new(0, mesh_data.clone(), Point3::default(), Matrix4::identity());
+        let identity_mesh = MeshInstance::new(mesh_data.clone(), Matrix4::identity());
 
         let ray = Ray::new(Point3::new(0.0, 0.0, 10.0), Vector3::new(0.0, 0.0, -1.0));
         let intersection = identity_mesh.intersect(&ray, 0.0, 1000.0).unwrap();
@@ -250,7 +250,7 @@ mod tests {
 
         let transform =
             Matrix4::new_rotation(Vector3::new(-std::f32::consts::FRAC_PI_2, 0.0, 0.0));
-        let mesh = MeshInstance::new(0, mesh_data.clone(), Point3::default(), transform);
+        let mesh = MeshInstance::new(mesh_data.clone(), transform);
 
         let ray = Ray::new(Point3::new(0.0, 10.0, 0.0), Vector3::new(0.0, -1.0, 0.0));
         let intersection = mesh.intersect(&ray, 0.0, 1000.0).unwrap();
@@ -267,7 +267,7 @@ mod tests {
 
         let transform =
             Matrix4::new_rotation(Vector3::new(-std::f32::consts::FRAC_PI_2, 0.0, 0.0));
-        let mesh = MeshInstance::new(0, mesh_data, Point3::default(), transform);
+        let mesh = MeshInstance::new(mesh_data, transform);
 
         let ray = Ray::new(Point3::new(0.0, 10.0, 0.0), Vector3::new(0.0, -1.0, 0.0));
         let intersection = mesh.intersect(&ray, 0.0, 1000.0).unwrap();
@@ -304,9 +304,7 @@ mod tests {
 
         let material = Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.5);
         let mesh = MeshInstance::new(
-            0,
             Arc::new(MeshData::new(triangle.to_vec(), vec![[0, 1, 2]], material)),
-            Point3::default(),
             Matrix4::identity(),
         );
 
@@ -324,7 +322,7 @@ mod tests {
     fn intersect_should_flip_tangent_handedness_for_mirrored_transform() {
         let mesh_data = create_test_mesh();
         let transform = Matrix4::new_nonuniform_scaling(&Vector3::new(-1.0, 1.0, 1.0));
-        let mesh = MeshInstance::new(0, mesh_data, Point3::default(), transform);
+        let mesh = MeshInstance::new(mesh_data, transform);
 
         let ray = Ray::new(Point3::new(0.0, 0.0, 10.0), Vector3::new(0.0, 0.0, -1.0));
         let intersection = mesh.intersect(&ray, 0.0, 1000.0).unwrap();
