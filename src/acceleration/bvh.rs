@@ -1,7 +1,8 @@
-use crate::acceleration::bounds::AABB;
+use crate::acceleration::bounds::{AABBIntersection, AABB};
 use crate::content::mesh::MeshInstance;
 use crate::core::Ray;
 use crate::scene::{Intersectable, Intersection};
+use crate::static_stack::StaticStack;
 
 pub struct BVH {
     nodes: Vec<BVHNode>,
@@ -36,6 +37,12 @@ struct Bin {
     count: u32,
 }
 
+#[derive(Copy, Clone)]
+struct StackEntry {
+    pub node_index: u32,
+    pub intersection: Option<AABBIntersection>,
+}
+
 impl BVH {
     pub fn new(items: &mut [MeshInstance]) -> Self {
         let mut nodes = Vec::new();
@@ -67,22 +74,32 @@ impl BVH {
         t_min: f32,
         t_max: f32,
     ) -> Option<(u32, Intersection)> {
-        let mut stack = [0u32; 64];
+        /*let mut stack = [0u32; 64];
         let mut stack_ptr = 0;
 
         stack[stack_ptr] = 0; // root
-        stack_ptr += 1;
+        stack_ptr += 1;*/
+
+        let mut stack = StaticStack::<StackEntry, 64>::new_with_default(StackEntry {
+            node_index: 0,
+            intersection: None,
+        });
+
+        stack.push(StackEntry {
+            node_index: 0,
+            intersection: nodes[0].bbox.intersect_closest(ray, t_max),
+        });
 
         let mut closest_t = t_max;
         let mut hit = None;
 
-        while stack_ptr > 0 {
-            stack_ptr -= 1;
-            let node_idx = stack[stack_ptr] as usize;
+        while stack.has_items() {
+            let entry = stack.pop();
+            let node_idx = entry.node_index as usize;
             let node = &nodes[node_idx];
 
             // 1. AABB test
-            if node.bbox.intersect_closest(ray, closest_t).is_some() {
+            if entry.intersection.is_some() {
                 if node.is_leaf() {
                     // 2. Test primitives
                     for i in node.first..node.first + node.count {
@@ -104,24 +121,36 @@ impl BVH {
                     match (t_left, t_right) {
                         (Some(tl), Some(tr)) => {
                             if tl.tmin < tr.tmin {
-                                stack[stack_ptr] = right as u32;
-                                stack_ptr += 1;
-                                stack[stack_ptr] = left as u32;
-                                stack_ptr += 1;
+                                stack.push(StackEntry {
+                                    node_index: right as u32,
+                                    intersection: t_right,
+                                });
+                                stack.push(StackEntry {
+                                    node_index: left as u32,
+                                    intersection: t_left,
+                                });
                             } else {
-                                stack[stack_ptr] = left as u32;
-                                stack_ptr += 1;
-                                stack[stack_ptr] = right as u32;
-                                stack_ptr += 1;
+                                stack.push(StackEntry {
+                                    node_index: left as u32,
+                                    intersection: t_left,
+                                });
+                                stack.push(StackEntry {
+                                    node_index: right as u32,
+                                    intersection: t_right,
+                                });
                             }
                         }
                         (Some(_), None) => {
-                            stack[stack_ptr] = left as u32;
-                            stack_ptr += 1;
+                            stack.push(StackEntry {
+                                node_index: left as u32,
+                                intersection: t_left,
+                            });
                         }
                         (None, Some(_)) => {
-                            stack[stack_ptr] = right as u32;
-                            stack_ptr += 1;
+                            stack.push(StackEntry {
+                                node_index: right as u32,
+                                intersection: t_right,
+                            });
                         }
                         (None, None) => {}
                     }

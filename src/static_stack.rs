@@ -19,6 +19,11 @@ where T: Copy
         self.size -= 1;
         self.items[self.size]
     }
+
+    pub fn peek(&self) -> T {
+        debug_assert!(self.size > 0);
+        self.items[self.size - 1]
+    }
 }
 
 impl<T, const N: usize> StaticStack<T, N> {
@@ -30,5 +35,8 @@ impl<T, const N: usize> StaticStack<T, N> {
     
     pub fn is_empty(&self) -> bool {
         self.size == 0
+    }
+    pub fn has_items(&self) -> bool {
+        self.size > 0
     }
 }

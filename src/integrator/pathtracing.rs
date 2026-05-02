@@ -8,6 +8,7 @@ use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use rayon::prelude::*;
 use crate::scene::material::CachedTextureLookups;
+use crate::static_stack::StaticStack;
 
 pub struct PathTracingIntegrator {}
 
@@ -26,6 +27,7 @@ impl PathTracingIntegrator {
         remaining_depth: u32,
         bounce_index: u32,
         rng: &mut impl Rng,
+        eta_stack: &mut StaticStack<f32, 8>,
     ) -> Vector3<f32> {
         let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
         let v = hit.intersection.tex_coord.y.rem_euclid(1.0);
@@ -67,7 +69,7 @@ impl PathTracingIntegrator {
         // Indirect lighting: BSDF sampling for next bounce
         let sample =
             hit.material
-                .sample_bsdf(ray.direction(), normal, albedo, &mut cached_textures, rng);
+                .sample_bsdf(ray.direction(), normal, albedo, &mut cached_textures, rng, eta_stack);
 
         // Offset based on outgoing hemisphere relative to the geometric normal.
         // This works for reflection and for both entering/exiting transmission.
@@ -104,7 +106,7 @@ impl PathTracingIntegrator {
             if rng.random::<f32>() > survival_prob {
                 Vector3::zeros() // Path terminated
             } else {
-                let indirect_light = Self::trace(&new_ray, scene, remaining_depth - 1, bounce_index + 1, rng);
+                let indirect_light = Self::trace(&new_ray, scene, remaining_depth - 1, bounce_index + 1, rng, eta_stack);
                 // Re-weight by survival probability to maintain unbiasedness
                 (indirect_light.component_mul(&sample.bsdf_value) * cos_theta) / (sample.pdf * survival_prob)
             }
@@ -126,6 +128,7 @@ impl PathTracingIntegrator {
         remaining_depth: u32,
         bounce_index: u32,
         rng: &mut impl Rng,
+        eta_stack: &mut StaticStack<f32, 8>,
     ) -> Vector3<f32> {
         // Safety cap: avoid pathological recursion (Russian roulette handles practical termination)
         if remaining_depth == 0 {
@@ -134,7 +137,7 @@ impl PathTracingIntegrator {
 
         scene
             .intersect(ray)
-            .map(|hit| Self::shade(&hit, ray, scene, remaining_depth, bounce_index, rng))
+            .map(|hit| Self::shade(&hit, ray, scene, remaining_depth, bounce_index, rng, eta_stack))
             .unwrap_or_else(|| scene.environment(&ray))
     }
 }
@@ -158,7 +161,9 @@ impl Integrator for PathTracingIntegrator {
                 let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
                 //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
 
-                let result = Self::trace(&ray, scene, MAX_BOUNCES, 0, &mut rng);
+                let mut eta_stack = StaticStack::<f32, 8>::new_with_default(0.0);
+                eta_stack.push(1.000277); // Assume initial eta = 1.000277 (Air) for all rays
+                let result = Self::trace(&ray, scene, MAX_BOUNCES, 0, &mut rng, &mut eta_stack);
 
                 row[x] += result * samples_inv;
             }

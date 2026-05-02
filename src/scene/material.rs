@@ -3,6 +3,7 @@ use nalgebra::{Matrix3, Vector2, Vector3, Vector4};
 use rand::Rng;
 use crate::scene::coordinate_system::CoordinateSystem;
 use crate::scene::texture::{Texture};
+use crate::static_stack::StaticStack;
 
 pub struct Material {
     /*
@@ -242,14 +243,20 @@ impl Material {
     /// Note: `bsdf_value` here is the contribution of the sampled lobe, not a
     /// full evaluation of all lobes. That is intentional because `pdf` is also
     /// branch-conditioned (e.g. `specular_prob * pdf_spec`).
-    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, cached_textures: &mut CachedTextureLookups, rng: &mut impl Rng) -> BsdfSample {
+    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, cached_textures: &mut CachedTextureLookups, rng: &mut impl Rng, eta_stack: &mut StaticStack<f32, 8>) -> BsdfSample {
         let n = normal;
         let v = (-incoming).normalize();
         let n_dot_v = n.dot(&v).max(0.0);
+        let exiting_material = n_dot_v == 0.0;
 
         // Handle transmission (refraction) for transparent materials
         if self.transmission_factor > 0.0 && rng.random::<f32>() < self.transmission_factor {
-            let eta_ratio = self.ior;  // Assume coming from air (eta=1.0)
+            let eta_ratio = if exiting_material { // Refracting from inside. Assuming we are leaving material
+                self.ior / eta_stack.peek()
+            }
+            else {
+                eta_stack.peek() / self.ior
+            };
 
             if let Some(refracted_dir) = Self::refract(incoming, normal, eta_ratio) {
                 let v_dot_n = v.dot(&n).abs();
@@ -258,6 +265,12 @@ impl Material {
                 // Transmission probability (1 - Fresnel reflection)
                 let transmission_prob = 1.0 - fresnel;
                 if transmission_prob > 1e-6 {
+                    if exiting_material {
+                        eta_stack.pop();
+                    }
+                    else {
+                        eta_stack.push(self.ior);
+                    }
                     // No absorption in the BSDF value for perfect transmission
                     // (absorption would be applied by distance traveled or volume rendering)
                     return BsdfSample {

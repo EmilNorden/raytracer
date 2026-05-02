@@ -7,6 +7,7 @@ pub struct AABB {
     max: Point3<f32>,
 }
 
+#[derive(Copy, Clone)]
 pub struct AABBIntersection {
     pub tmin: f32,
     pub tmax: f32,
