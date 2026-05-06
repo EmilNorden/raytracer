@@ -6,7 +6,7 @@ use crate::content::mesh::{MeshData, MeshInstance};
 use crate::content::scene_loader::{SceneError, SceneLoader};
 use crate::content::triangle::Vertex;
 use crate::options::RenderOptions;
-use crate::scene::light::{LightSource, PointLight};
+use crate::scene::light::{DirectionalLight, LightSource, PointLight};
 use crate::scene::material::Material;
 use crate::scene::node_graph::{NodeGraph, NodeTransform, SceneNode};
 use crate::scene::scene::Scene;
@@ -209,6 +209,14 @@ impl GltfLoader {
                     let color = light.color();
                     light_index = Some(lights.len());
                     lights.push(LightSource::Point(PointLight::new(position, Vector3::new(color[0], color[1], color[2]), intensity, 1.0)))
+                },
+                Kind::Directional => {
+                    let direction = transform.transform_vector(&Vector3::new(0.0, 0.0, -1.0));
+                    let intensity = light.intensity();
+                    let color = light.color();
+                    light_index = Some(lights.len());
+                    lights.push(LightSource::Directional(DirectionalLight::new(direction, Vector3::new(color[0], color[1], color[2]), intensity)))
+
                 }
                 _ => {}
             }

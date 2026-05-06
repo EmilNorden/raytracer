@@ -158,6 +158,8 @@ fn main() {
 
     let event_loop = EventLoop::new().unwrap();
 
+    println!("Rendering using {} thread(s)", rayon::current_num_threads());
+
     let render_controller = RenderController::start(options, scene, animation_controller, integrator);
 
     let mut app = App {

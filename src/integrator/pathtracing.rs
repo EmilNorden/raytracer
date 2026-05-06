@@ -41,29 +41,50 @@ impl PathTracingIntegrator {
 
         // Direct lighting: explicitly sample light sources
         let mut direct_light = Vector3::zeros();
-        if let Some((light_point, light_normal, light_emissive, light_pdf)) =
-            scene.sample_light(rng)
+        if let Some(light_sample) = scene.sample_light(rng)
         {
-            // Direction and distance to light
-            let to_light = light_point - surface_point;
-            let distance_sq = to_light.magnitude_squared();
-            let light_dir = to_light.normalize();
+            if let Some(light_point) = light_sample.position {
+                // Direction and distance to light
+                let to_light = light_point - surface_point;
+                let distance_sq = to_light.magnitude_squared();
+                let light_dir = to_light.normalize();
 
-            // Cosine terms
-            let cos_theta = normal.dot(&light_dir).max(0.0);
-            let cos_theta_light = light_normal.dot(&(-light_dir)).max(0.0);
-            if cos_theta > 0.0 && cos_theta_light > 0.0 {
-                // Cast shadow ray to check visibility
-                if scene.is_visible(surface_point, light_point) {
-                    let view_dir = -ray.direction();
-                    let brdf =
-                        hit.material
-                            .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, &mut cached_textures);
-                    direct_light = (light_emissive * (cos_theta_light / (distance_sq * light_pdf)))
-                        .component_mul(&brdf)
-                        * cos_theta;
+                // Cosine terms
+                let cos_theta = normal.dot(&light_dir).max(0.0);
+                let cos_theta_light = light_sample.wi.dot(&(-light_dir)).max(0.0);
+                if cos_theta > 0.0 && cos_theta_light > 0.0 {
+                    // Cast shadow ray to check visibility
+                    if scene.is_visible(surface_point, light_point) {
+                        let view_dir = -ray.direction();
+                        let brdf =
+                            hit.material
+                                .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, &mut cached_textures);
+                        direct_light = (light_sample.radiance * (cos_theta_light / (distance_sq * light_sample.pdf)))
+                            .component_mul(&brdf)
+                            * cos_theta;
+                    }
+                }
+            } else if light_sample.is_delta {
+                // Handle delta light (e.g., directional light) contribution
+                let light_dir = light_sample.wi; // Light comes from this direction
+                let cos_theta = normal.dot(&light_dir).max(0.0);
+                if cos_theta > 0.0 {
+                    // Cast shadow ray to check visibility
+                    let shadow_ray = Ray::new(surface_point, light_dir);
+                    if scene.intersect(&shadow_ray).is_none() {
+                        let view_dir = -ray.direction();
+                        let brdf =
+                            hit.material
+                                .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, &mut cached_textures);
+                        direct_light = (light_sample.radiance / light_sample.pdf)
+                            .component_mul(&brdf)
+                            * cos_theta;
+                    }
                 }
             }
+
+
+
         }
 
         // Indirect lighting: BSDF sampling for next bounce
@@ -151,6 +172,7 @@ impl Integrator for PathTracingIntegrator {
         let height_inv = 1.0 / height as f32;
         let width_inv = 1.0 / width as f32;
         let samples_inv = 1.0 / samples as f32;
+        
 
         frame.pixels_mut().par_chunks_mut(width).enumerate().for_each(|(y, row)| {
             let mut rng = rand::rng();
@@ -161,8 +183,9 @@ impl Integrator for PathTracingIntegrator {
                 let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
                 //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
 
-                let mut eta_stack = StaticStack::<f32, 8>::new_with_default(0.0);
-                eta_stack.push(1.000277); // Assume initial eta = 1.000277 (Air) for all rays
+                // Assume initial eta = 1.000277 (Air) for all rays
+                let mut eta_stack = StaticStack::<f32, 8>::new_with_default(1.000277);
+
                 let result = Self::trace(&ray, scene, MAX_BOUNCES, 0, &mut rng, &mut eta_stack);
 
                 row[x] += result * samples_inv;

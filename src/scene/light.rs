@@ -3,6 +3,7 @@ use crate::content::mesh::MeshInstance;
 
 pub enum LightSource {
     Point(PointLight),
+    Directional(DirectionalLight),
     Mesh(MeshInstance),
 }
 
@@ -11,10 +12,13 @@ impl LightSource {
         match self {
             LightSource::Point(light) => {
                 light.position = transform.transform_point(&Point3::origin());
+            },
+            LightSource::Directional(_) => {
+                // Do nothing
             }
             LightSource::Mesh(mesh) => {
                 mesh.update_transform(transform);
-            }
+            },
         }
     }
 }
@@ -33,6 +37,22 @@ impl PointLight {
             intensity,
             position,
             radius,
+        }
+    }
+}
+
+pub struct DirectionalLight {
+    pub color: Vector3<f32>,
+    pub intensity: f32,
+    pub direction: Vector3<f32>,
+}
+
+impl DirectionalLight {
+    pub fn new(direction: Vector3<f32>, color: Vector3<f32>, intensity: f32) -> Self {
+        Self {
+            color,
+            intensity,
+            direction,
         }
     }
 }

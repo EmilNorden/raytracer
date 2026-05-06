@@ -12,6 +12,14 @@ pub struct Scene {
     bvh: BVH,
     lights: Vec<LightSource>,
 }
+    
+pub struct LightSample {
+    pub wi: Vector3<f32>,
+    pub radiance: Vector3<f32>,
+    pub pdf: f32,
+    pub is_delta: bool,
+    pub position: Option<Point3<f32>>,
+}
 
 impl Scene {
     pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, mut lights: Vec<LightSource>) -> Self {
@@ -71,7 +79,7 @@ impl Scene {
 
     /// Sample a random point on a random emissive surface
     /// Returns (point, normal, emissive_color, pdf)
-    pub fn sample_light(&self, rng: &mut impl rand::Rng) -> Option<(Point3<f32>, Vector3<f32>, Vector3<f32>, f32)> {
+    pub fn sample_light(&self, rng: &mut impl rand::Rng) -> Option<LightSample> {
         if self.lights.is_empty() {
             return None;
         }
@@ -90,11 +98,34 @@ impl Scene {
                 let area = 4.0 * std::f32::consts::PI * point_light.radius * point_light.radius;
                 let pdf = 1.0 / area;
 
-                let emissive = point_light.color * point_light.intensity;
+                let radiance = point_light.color * point_light.intensity;
 
-                Some((point, normal, emissive, pdf))
+                Some(LightSample {
+                    wi: normal,
+                    radiance,
+                    pdf,
+                    is_delta: false,
+                    position: Some(point),
+                })
+                //Some((point, normal, emissive, pdf))
 
-            }
+            },
+            LightSource::Directional(directional_light) => {
+                let normal = -directional_light.direction.normalize(); // Light comes from this direction
+
+                let pdf = 1.0;
+
+                let radiance = directional_light.color * directional_light.intensity;
+
+                Some(LightSample {
+                    wi: normal,
+                    radiance,
+                    pdf,
+                    is_delta: true,
+                    position: None
+                })
+                //Some((point, normal, emissive, pdf))
+            },
             LightSource::Mesh(mesh) => {
                 // Sample a random point on the mesh by sampling a random triangle
                 let triangle_index = rng.random_range(..mesh.triangle_count() as usize);
@@ -104,14 +135,21 @@ impl Scene {
                 let (point, normal) = triangle.sample_uniform_point(rng);
 
 
-                let emissive = mesh.material().emissive_factor();
+                let radiance = mesh.material().emissive_factor();
 
                 // PDF is 1/area. For now, use a rough estimate
                 let bounds = mesh.bounds();
                 let area = (bounds.max().x - bounds.min().x) * (bounds.max().z - bounds.min().z);
                 let pdf = 1.0 / area;
 
-                Some((point, normal, emissive, pdf))
+                Some(LightSample {
+                    wi: normal,
+                    radiance,
+                    pdf,
+                    is_delta: false,
+                    position: Some(point),
+                })
+                //Some((point, normal, emissive, pdf))
             }
         }
     }

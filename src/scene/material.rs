@@ -246,8 +246,9 @@ impl Material {
     pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, cached_textures: &mut CachedTextureLookups, rng: &mut impl Rng, eta_stack: &mut StaticStack<f32, 8>) -> BsdfSample {
         let n = normal;
         let v = (-incoming).normalize();
-        let n_dot_v = n.dot(&v).max(0.0);
-        let exiting_material = n_dot_v == 0.0;
+        let n_dot_v = n.dot(&v);
+        let n_dot_v_max = n_dot_v.max(0.0);
+        let exiting_material = n_dot_v_max == 0.0;
 
         // Handle transmission (refraction) for transparent materials
         if self.transmission_factor > 0.0 && rng.random::<f32>() < self.transmission_factor {
@@ -259,8 +260,8 @@ impl Material {
             };
 
             if let Some(refracted_dir) = Self::refract(incoming, normal, eta_ratio) {
-                let v_dot_n = v.dot(&n).abs();
-                let fresnel = Self::fresnel_dielectric(v_dot_n, eta_ratio);
+                let n_dot_v_abs = n_dot_v.abs();
+                let fresnel = Self::fresnel_dielectric(n_dot_v_abs, eta_ratio);
 
                 // Transmission probability (1 - Fresnel reflection)
                 let transmission_prob = 1.0 - fresnel;
@@ -286,7 +287,7 @@ impl Material {
             // If total internal reflection, fall through to reflection
         }
 
-        if n_dot_v <= 0.0 {
+        if n_dot_v_max <= 0.0 {
             return BsdfSample {
                 direction: n,
                 bsdf_value: Vector3::zeros(),
@@ -330,9 +331,9 @@ impl Material {
 
             let n_dot_h = n.dot(&h).max(0.0);
             let d = Self::ggx_ndf(n_dot_h, alpha);
-            let g = Self::smith_geometry(n_dot_v, n_dot_l, alpha);
+            let g = Self::smith_geometry(n_dot_v_max, n_dot_l, alpha);
             let f = Self::schlick_fresnel(v_dot_h, f0);
-            let bsdf_value = f * (d * g / (4.0 * n_dot_v * n_dot_l + 1e-6));
+            let bsdf_value = f * (d * g / (4.0 * n_dot_v_max * n_dot_l + 1e-6));
             let pdf_spec = d * n_dot_h / (4.0 * v_dot_h + 1e-6);
 
             return BsdfSample {
