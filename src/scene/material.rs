@@ -193,27 +193,25 @@ impl Material {
         a + t * (b - a)
     }
 
-    /// Refract a ray using Snell's law
-    /// Returns (refracted_direction, eta_ratio) where eta_ratio = eta_t / eta_i
-    fn refract(incoming: Vector3<f32>, normal: Vector3<f32>, eta_ratio: f32) -> Option<Vector3<f32>> {
-        let v = (-incoming).normalize();
-        let n = normal.normalize();
-        let n_dot_v = n.dot(&v);
+    // Refracts using Snell's law. eta_ratio is the ratio of indices of refraction (eta_i / eta_t)
+    // Returns None if total internal reflection.
+    fn refract(incident: Vector3<f32>, mut normal: Vector3<f32>, eta_ratio: f32) -> Option<Vector3<f32>> {
+        let mut cos_i = incident.dot(&normal);
 
-        // If ray hits from inside, we need to flip normal and adjust eta_ratio
-        let (n_final, n_dot_v_final, eta_final) = if n_dot_v < 0.0 {
-            (-n, -n_dot_v, 1.0 / eta_ratio)
+        if cos_i > 0.0 {
+            normal = -normal;
         } else {
-            (n, n_dot_v, eta_ratio)
-        };
-
-        let discriminant = 1.0 - eta_final * eta_final * (1.0 - n_dot_v_final * n_dot_v_final);
-        if discriminant < 0.0 {
-            return None;  // Total internal reflection
+            cos_i = -cos_i;
         }
 
-        let refracted = eta_final * (-v) + (eta_final * n_dot_v_final - discriminant.sqrt()) * n_final;
-        Some(refracted.normalize())
+        let k = 1.0 - eta_ratio * eta_ratio * (1.0 - cos_i * cos_i);
+        if k < 0.0 {
+            None
+        }
+        else {
+            let refracted = eta_ratio * incident + (eta_ratio * cos_i - k.sqrt()) * normal;
+            Some(refracted.normalize())
+        }
     }
 
     /// Compute Fresnel reflectance for dielectrics (unpolarized light)
@@ -248,16 +246,18 @@ impl Material {
         let v = (-incoming).normalize();
         let n_dot_v = n.dot(&v);
         let n_dot_v_max = n_dot_v.max(0.0);
-        let exiting_material = n_dot_v_max == 0.0;
+        let exiting_material = n_dot_v < 0.0;
 
         // Handle transmission (refraction) for transparent materials
         if self.transmission_factor > 0.0 && rng.random::<f32>() < self.transmission_factor {
             let eta_ratio = if exiting_material { // Refracting from inside. Assuming we are leaving material
+                 eta_stack.pop();
                 self.ior / eta_stack.peek()
             }
             else {
-                eta_stack.peek() / self.ior
+                 eta_stack.peek() / self.ior
             };
+
 
             if let Some(refracted_dir) = Self::refract(incoming, normal, eta_ratio) {
                 let n_dot_v_abs = n_dot_v.abs();
@@ -266,10 +266,7 @@ impl Material {
                 // Transmission probability (1 - Fresnel reflection)
                 let transmission_prob = 1.0 - fresnel;
                 if transmission_prob > 1e-6 {
-                    if exiting_material {
-                        eta_stack.pop();
-                    }
-                    else {
+                    if !exiting_material {
                         eta_stack.push(self.ior);
                     }
                     // No absorption in the BSDF value for perfect transmission

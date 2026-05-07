@@ -12,7 +12,7 @@ pub struct Scene {
     bvh: BVH,
     lights: Vec<LightSource>,
 }
-    
+
 pub struct LightSample {
     pub wi: Vector3<f32>,
     pub radiance: Vector3<f32>,
