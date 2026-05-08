@@ -162,6 +162,41 @@ impl Scene {
         }
     }
 
+    pub fn transmission_along_path(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> f32 {
+        let direction = p2 - p1;
+        let distance = direction.norm();
+        if distance <= 1e-5 {
+            return 1.0;
+        }
+
+        let ray = Ray::new(p1.into(), direction / distance);
+        let t_min = 0.001;
+        let t_max = (distance - 0.001).max(0.0);
+
+        if let Some((mesh_index, hit)) =
+            self.bvh.intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max, ctx) {
+
+            let mesh = &self.meshes[mesh_index as usize];
+            let material = mesh.material();
+            if material.transmission_factor() > 0.0 {
+                let transformed_bounds = mesh.bounds().transform(mesh.transform());
+                let new_p1 = ray.origin() + (ray.direction() * transformed_bounds.intersect(&ray).unwrap().tmax);
+
+                let subpath = self.transmission_along_path(new_p1, p2, ctx);
+
+                return material.transmission_factor() * subpath;
+            }
+
+            return 0.0;
+        }
+
+        1.0
+    }
+
+    fn transmission_along_path_inner(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> Option<f32> {
+        unimplemented!()
+    }
+
     /// Check if there's an unoccluded path between two points
     pub fn is_visible(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> bool {
         let direction = p2 - p1;

@@ -56,7 +56,17 @@ impl PathTracingIntegrator {
                 let cos_theta_light = light_sample.wi.dot(&(-light_dir)).max(0.0);
                 if cos_theta > 0.0 && cos_theta_light > 0.0 {
                     // Cast shadow ray to check visibility
-                    if scene.is_visible(surface_point, light_point, ctx) {
+                    let transmission = scene.transmission_along_path(surface_point, light_point, ctx);
+                    if transmission > 0.0 {
+                        let view_dir = -ray.direction();
+                        let brdf =
+                            hit.material
+                                .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, &mut cached_textures);
+                        direct_light = (light_sample.radiance * (cos_theta_light / (distance_sq * light_sample.pdf)))
+                            .component_mul(&brdf)
+                            * cos_theta * transmission;
+                    }
+                    /*if scene.is_visible(surface_point, light_point, ctx) {
                         let view_dir = -ray.direction();
                         let brdf =
                             hit.material
@@ -64,7 +74,7 @@ impl PathTracingIntegrator {
                         direct_light = (light_sample.radiance * (cos_theta_light / (distance_sq * light_sample.pdf)))
                             .component_mul(&brdf)
                             * cos_theta;
-                    }
+                    }*/
                 }
             } else if light_sample.is_delta {
                 // Handle delta light (e.g., directional light) contribution
