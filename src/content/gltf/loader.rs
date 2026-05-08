@@ -342,9 +342,10 @@ impl SceneLoader for GltfLoader {
 
             if cameras.is_empty() { return Err(SceneError::NoCameras.into()); }
 
-            println!("Loaded scene with {} meshes, {} cameras, {} lights", meshes.len(), cameras.len(), lights.len());
+            let scene = Scene::new(cameras, meshes, lights);
+            println!("Loaded scene {}", scene);
 
-            Ok((Scene::new(cameras, meshes, lights), AnimationController::new(node_graph, animations)))
+            Ok((scene, AnimationController::new(node_graph, animations)))
         }
         else { Err(SceneError::NoDefaultScene.into()) }
     }

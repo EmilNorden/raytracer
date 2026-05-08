@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use crate::acceleration::bvh::BVH;
 use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::MeshInstance;
@@ -20,6 +21,12 @@ pub struct LightSample {
     pub pdf: f32,
     pub is_delta: bool,
     pub position: Option<Point3<f32>>,
+}
+
+impl Display for Scene {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Scene with {} cameras, {} meshes, {} lights. Total triangles: {}", self.cameras.len(), self.meshes.len(), self.lights.len(), self.triangle_count())
+    }
 }
 
 impl Scene {
@@ -170,5 +177,9 @@ impl Scene {
         self.bvh
             .intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max, ctx)
             .is_none()
+    }
+
+    pub fn triangle_count(&self) -> usize {
+        self.meshes.iter().map(|mesh| mesh.triangle_count()).sum()
     }
 }
