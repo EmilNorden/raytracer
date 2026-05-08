@@ -1,9 +1,12 @@
 use std::f32::consts::PI;
 use nalgebra::{Matrix3, Vector2, Vector3, Vector4};
 use rand::Rng;
+use crate::context::Context;
 use crate::scene::coordinate_system::CoordinateSystem;
 use crate::scene::texture::{Texture};
 use crate::static_stack::StaticStack;
+
+pub const IOR_AIR: f32 = 1.000277;
 
 pub struct Material {
     /*
@@ -241,7 +244,7 @@ impl Material {
     /// Note: `bsdf_value` here is the contribution of the sampled lobe, not a
     /// full evaluation of all lobes. That is intentional because `pdf` is also
     /// branch-conditioned (e.g. `specular_prob * pdf_spec`).
-    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, cached_textures: &mut CachedTextureLookups, rng: &mut impl Rng, eta_stack: &mut StaticStack<f32, 8>) -> BsdfSample {
+    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, cached_textures: &mut CachedTextureLookups, rng: &mut impl Rng, eta_stack: &mut StaticStack<f32, 8>, ctx: &Context) -> BsdfSample {
         let n = normal;
         let v = (-incoming).normalize();
         let n_dot_v = n.dot(&v);
@@ -251,8 +254,17 @@ impl Material {
         // Handle transmission (refraction) for transparent materials
         if self.transmission_factor > 0.0 && rng.random::<f32>() < self.transmission_factor {
             let eta_ratio = if exiting_material { // Refracting from inside. Assuming we are leaving material
-                 eta_stack.pop();
-                self.ior / eta_stack.peek()
+               /*
+               It seems that sometimes we find ourselves leaving materials we never entered.
+               I suspect this occurs when a transmissive object such as a glass sphere is located
+               next to another reflective object. When a ray intersection occurs on the reflective object just on the border
+               to the transmissive object, the reflected ray is slightly offset along the surface normal so as to not self-intersect,
+               however causing the ray to be pushed into the transmissive object.
+               For now, the workaround is to fallback to eta_t=IOR_AIR when that happens*/
+
+                ctx.diag.exit_without_enter();
+
+                self.ior / eta_stack.peek_at(1).unwrap_or(IOR_AIR)
             }
             else {
                  eta_stack.peek() / self.ior
@@ -266,8 +278,18 @@ impl Material {
                 // Transmission probability (1 - Fresnel reflection)
                 let transmission_prob = 1.0 - fresnel;
                 if transmission_prob > 1e-6 {
-                    if !exiting_material {
+                    if exiting_material {
+                        eta_stack.pop();
+                        if eta_stack.is_empty() {
+                            // eta stack underflow. This shouldn't happen, but could happen
+                            // for the same reason as above. Workaround: make sure there's always an eta on the stack
+                            ctx.diag.eta_underflow();
+                            eta_stack.push(IOR_AIR);
+                        }
+                    }
+                    else {
                         eta_stack.push(self.ior);
+
                     }
                     // No absorption in the BSDF value for perfect transmission
                     // (absorption would be applied by distance traveled or volume rendering)
@@ -412,14 +434,16 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
     /// This is what you want when the outgoing direction is already known,
     /// for example during next-event estimation / direct light sampling.
     pub fn evaluate_bsdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>, cached_textures: &mut CachedTextureLookups) -> Vector3<f32> {
-        let half_vector = (light_dir + view_dir).normalize();
         let n_dot_l = normal.dot(&light_dir).max(0.0);
         let n_dot_v = normal.dot(&view_dir).max(0.0);
-        let n_dot_h = normal.dot(&half_vector).max(0.0);
-        let v_dot_h = view_dir.dot(&half_vector).max(0.0);
+
         if n_dot_l <= 0.0 || n_dot_v <= 0.0 {
             return Vector3::zeros();
         }
+
+        let half_vector = (light_dir + view_dir).normalize();
+        let n_dot_h = normal.dot(&half_vector).max(0.0);
+        let v_dot_h = view_dir.dot(&half_vector).max(0.0);
 
         let alpha = self.alpha(cached_textures);
         let f0 = self.f0_from_albedo(albedo, cached_textures);

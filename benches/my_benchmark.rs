@@ -3,6 +3,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use raytracer::content::gltf::loader::GltfLoader;
 use raytracer::content::scene_loader::SceneLoader;
+use raytracer::context::Context;
 use raytracer::frame::Frame;
 use raytracer::integrator::integrator::{Integrator, IntegratorImpl};
 use raytracer::integrator::pathtracing::PathTracingIntegrator;
@@ -32,6 +33,8 @@ fn bench_render(c: &mut Criterion) {
             video: false,
         };
 
+        let ctx = Context::new();
+
         let (scene, _animation_controller) =
             GltfLoader::load_scene(&options.scene_file, &options).unwrap();
         let integrator = IntegratorImpl::Pathtracing(PathTracingIntegrator::new());
@@ -40,7 +43,7 @@ fn bench_render(c: &mut Criterion) {
             b.iter_batched(
                 || Frame::new(opts.resolution.width, opts.resolution.height),
                 |mut frame| {
-                    integrator.integrate(&scene, &mut frame, opts.samples);
+                    integrator.integrate(&scene, &mut frame, opts.samples, &ctx);
                 },
                 BatchSize::SmallInput,
             )

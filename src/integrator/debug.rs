@@ -2,6 +2,7 @@ use rayon::iter::ParallelIterator;
 use nalgebra::{Vector2, Vector3};
 use rayon::iter::IntoParallelIterator;
 use crate::camera::viewpoint::Viewpoint;
+use crate::context::Context;
 use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
 use crate::scene::scene::Scene;
@@ -15,7 +16,7 @@ impl DebugIntegrator {
 }
 
 impl Integrator for DebugIntegrator {
-    fn integrate(&self, scene: &Scene, frame: &mut Frame, _samples: u32) {
+    fn integrate(&self, scene: &Scene, frame: &mut Frame, _samples: u32, ctx: &Context) {
         let width = frame.width() as usize;
         let height = frame.height() as usize;
 
@@ -27,7 +28,7 @@ impl Integrator for DebugIntegrator {
 
                     let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
 
-                    if let Some(hit) = scene.intersect(&ray) {
+                    if let Some(hit) = scene.intersect(&ray, ctx) {
                         let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
                         let v = hit.intersection.tex_coord.y.rem_euclid(1.0);
                         let tex_coords = Vector2::new(u, v);

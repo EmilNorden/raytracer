@@ -1,5 +1,6 @@
 use crate::acceleration::bounds::{AABBIntersection, AABB};
 use crate::content::mesh::MeshInstance;
+use crate::context::Context;
 use crate::core::Ray;
 use crate::scene::{Intersectable, Intersection};
 use crate::static_stack::StaticStack;
@@ -53,8 +54,8 @@ impl BVH {
         }
     }
 
-    pub fn intersect(&self, items: &[MeshInstance], ray: &Ray) -> Option<(u32, Intersection)> {
-        self.intersect_with_limits(items, ray, 0.0, f32::INFINITY)
+    pub fn intersect(&self, items: &[MeshInstance], ray: &Ray, ctx: &Context) -> Option<(u32, Intersection)> {
+        self.intersect_with_limits(items, ray, 0.0, f32::INFINITY, ctx)
     }
 
     pub fn intersect_with_limits(
@@ -63,8 +64,9 @@ impl BVH {
         ray: &Ray,
         t_min: f32,
         t_max: f32,
+        ctx: &Context,
     ) -> Option<(u32, Intersection)> {
-        Self::traverse_bvh(&self.nodes, items, ray, t_min, t_max)
+        Self::traverse_bvh(&self.nodes, items, ray, t_min, t_max, ctx)
     }
 
     fn traverse_bvh(
@@ -73,6 +75,7 @@ impl BVH {
         ray: &Ray,
         t_min: f32,
         t_max: f32,
+        ctx: &Context
     ) -> Option<(u32, Intersection)> {
         /*let mut stack = [0u32; 64];
         let mut stack_ptr = 0;
@@ -105,7 +108,9 @@ impl BVH {
                     for i in node.first..node.first + node.count {
                         let prim = &prims[i as usize];
 
+                        ctx.stats.ray_triangle_tests();
                         if let Some(h) = prim.intersect(ray, t_min, closest_t) {
+                            ctx.stats.ray_triangle_hits();
                             closest_t = h.dist;
                             hit = Some((i, h));
                         }
@@ -373,6 +378,7 @@ mod tests {
     use rand::rngs::StdRng;
     use crate::content::mesh::{MeshData, MeshInstance};
     use crate::content::triangle::Vertex;
+    use crate::context::Context;
     use crate::core::Ray;
     use crate::scene::{Intersectable, Intersection};
     use crate::scene::material::Material;
@@ -443,6 +449,8 @@ mod tests {
 
     #[test]
     fn bvh_matches_bruteforce_for_closest_hit() {
+        let ctx = Context::new();
+
         let mut meshes = vec![
             make_mesh(Vector3::new(0.0, 0.0, 3.0)),
             make_mesh(Vector3::new(0.0, 0.0, 6.0)),
@@ -459,7 +467,7 @@ mod tests {
         ];
 
         for ray in rays {
-            let bvh_hit = bvh.intersect_with_limits(&meshes, &ray, 0.001, f32::INFINITY);
+            let bvh_hit = bvh.intersect_with_limits(&meshes, &ray, 0.001, f32::INFINITY, &ctx);
             let brute_hit = brute_force(&meshes, &ray, 0.001, f32::INFINITY);
 
             match (bvh_hit, brute_hit) {
@@ -475,6 +483,8 @@ mod tests {
 
     #[test]
     fn intersect_with_limits_respects_t_max_for_shadow_segment() {
+        let ctx = Context::new();
+
         let mut meshes = vec![
             make_mesh(Vector3::new(0.0, 0.0, 5.0)),
         ];
@@ -482,10 +492,10 @@ mod tests {
         let bvh = BVH::new(&mut meshes);
         let ray = Ray::new(Point3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0));
 
-        let miss = bvh.intersect_with_limits(&meshes, &ray, 0.001, 4.5);
+        let miss = bvh.intersect_with_limits(&meshes, &ray, 0.001, 4.5, &ctx);
         assert!(miss.is_none());
 
-        let hit = bvh.intersect_with_limits(&meshes, &ray, 0.001, 5.5);
+        let hit = bvh.intersect_with_limits(&meshes, &ray, 0.001, 5.5, &ctx);
         assert!(hit.is_some());
     }
 
@@ -501,6 +511,8 @@ mod tests {
 
         let bvh = BVH::new(&mut meshes);
         let mut rng = StdRng::seed_from_u64(0xC0FFEE);
+
+        let ctx = Context::new();
 
         for ray_index in 0..5000 {
             let origin = Point3::new(
@@ -520,7 +532,7 @@ mod tests {
             let t_min = 0.001;
             let t_max = 20.0;
 
-            let bvh_hit = bvh.intersect_with_limits(&meshes, &ray, t_min, t_max);
+            let bvh_hit = bvh.intersect_with_limits(&meshes, &ray, t_min, t_max, &ctx);
             let brute_hit = brute_force(&meshes, &ray, t_min, t_max);
 
             match (bvh_hit, brute_hit) {

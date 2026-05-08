@@ -8,6 +8,7 @@ use std::process::Command;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+use crate::context::Context;
 
 pub struct RenderUpdate {
     pub sample: u32,
@@ -37,6 +38,8 @@ impl RenderController {
         let (update_tx, update_rx) = mpsc::channel();
         let (command_tx, command_rx) = mpsc::channel();
 
+        let ctx = Context::new();
+
         let worker = thread::spawn(move || {
             let mut frame = Frame::new(options.resolution.width, options.resolution.height);
             let render_start = Instant::now();
@@ -51,7 +54,7 @@ impl RenderController {
                         break;
                     }
 
-                    integrator.integrate(&scene, &mut frame, options.samples);
+                    integrator.integrate(&scene, &mut frame, options.samples, &ctx);
 
                     let mut rgba = vec![0_u8; (frame.width() * frame.height() * 4) as usize];
                     frame.write_rgba(&mut rgba);
@@ -82,6 +85,8 @@ impl RenderController {
                     }
 
                 }
+
+                ctx.finalize();
 
                 if !options.video {
                     break;

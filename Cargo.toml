@@ -3,6 +3,11 @@ name = "raytracer"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+diagnostics = []
+statistics = []
+
 [dependencies]
 nalgebra = "0.33.2"
 image = "0.25.6"

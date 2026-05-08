@@ -5,6 +5,7 @@ use crate::core::Ray;
 use crate::scene::light::LightSource;
 use crate::scene::{Intersectable, Shadeable, ShadingContext};
 use nalgebra::{Point3, Vector3};
+use crate::context::Context;
 
 pub struct Scene {
     cameras : Vec<PerspectiveCamera>,
@@ -60,8 +61,8 @@ impl Scene {
         &mut self.lights
     }
 
-    pub fn intersect(&'_ self, ray: &Ray) -> Option<ShadingContext<'_>> {
-       self.bvh.intersect(self.meshes.as_slice(), ray).map(|(mesh_index, hit)| {
+    pub fn intersect(&'_ self, ray: &Ray, ctx: &Context) -> Option<ShadingContext<'_>> {
+       self.bvh.intersect(self.meshes.as_slice(), ray, ctx).map(|(mesh_index, hit)| {
             ShadingContext {
                 intersection: hit,
                 material: self.meshes[mesh_index as usize].material(),
@@ -155,7 +156,7 @@ impl Scene {
     }
 
     /// Check if there's an unoccluded path between two points
-    pub fn is_visible(&self, p1: Point3<f32>, p2: Point3<f32>) -> bool {
+    pub fn is_visible(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> bool {
         let direction = p2 - p1;
         let distance = direction.norm();
         if distance <= 1e-5 {
@@ -167,7 +168,7 @@ impl Scene {
         let t_max = (distance - 0.001).max(0.0);
 
         self.bvh
-            .intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max)
+            .intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max, ctx)
             .is_none()
     }
 }
