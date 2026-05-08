@@ -250,6 +250,7 @@ impl Material {
         let n_dot_v = n.dot(&v);
         let n_dot_v_max = n_dot_v.max(0.0);
         let exiting_material = n_dot_v < 0.0;
+        let transmissive = self.transmission_factor > 0.0;
 
         // Handle transmission (refraction) for transparent materials
         if self.transmission_factor > 0.0 && rng.random::<f32>() < self.transmission_factor {
@@ -319,7 +320,11 @@ impl Material {
 
         let alpha = self.alpha(cached_textures);
         let f0 = self.f0_from_albedo(&albedo, cached_textures);
-        let specular_prob = self.specular_sampling_probability(&f0);
+        let specular_prob = if transmissive {
+            1.0
+        } else {
+            self.specular_sampling_probability(&f0)
+        };
 
         if rng.random::<f32>() < specular_prob {
             let h = self.sample_ggx_half_vector(&n, alpha, rng);
@@ -380,7 +385,7 @@ impl Material {
             };
         }
 
-        let kd = 1.0 - cached_textures.metallic();
+        let kd = (1.0 - self.transmission_factor) * (1.0 - cached_textures.metallic());
         let bsdf_value = albedo * (kd / PI);
         let pdf_diffuse = n_dot_l / PI;
 
@@ -452,7 +457,8 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         let g = Self::smith_geometry(n_dot_v, n_dot_l, alpha);
         let f = Self::schlick_fresnel(v_dot_h, f0);
         let specular = f * (d * g / (4.0 * n_dot_v * n_dot_l + 1e-6));
-        let diffuse = albedo * ((1.0 - cached_textures.metallic()) / PI);
+        let diffuse_weight = (1.0 - self.transmission_factor) * (1.0 - cached_textures.metallic());
+        let diffuse = albedo * (diffuse_weight / PI);
 
         diffuse + specular
     }
@@ -463,7 +469,8 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
     }
 
     fn f0_from_albedo(&self, albedo: &Vector3<f32>, cached_textures: &mut CachedTextureLookups) -> Vector3<f32> {
-        let dielectric_f0 = Vector3::new(0.04, 0.04, 0.04);
+        let dielectric_f0_scalar = ((self.ior - IOR_AIR) / (self.ior + IOR_AIR)).powi(2);
+        let dielectric_f0 = Vector3::repeat(dielectric_f0_scalar);
         dielectric_f0 + (albedo - dielectric_f0) * cached_textures.metallic()
     }
 
@@ -631,5 +638,31 @@ mod tests {
         );
 
         assert!((normal - Vector3::new(0.0, 0.0, 1.0)).norm() <= 1e-6);
+    }
+
+    #[test]
+    fn evaluate_bsdf_does_not_add_diffuse_tint_for_fully_transmissive_materials() {
+        let material = Material::new(
+            Vector3::new(0.0, 1.0, 0.0),
+            None,
+            None,
+            None,
+            None,
+            1.0,
+            Vector3::zeros(),
+            0.5,
+            0.0,
+            1.0,
+            1.5,
+        );
+        let mut cache = CachedTextureLookups::new(&material, Vector2::new(0.5, 0.5));
+        let normal = Vector3::new(0.0, 0.0, 1.0);
+        let light_dir = Vector3::new(0.0, 0.0, 1.0);
+        let view_dir = Vector3::new(0.0, 0.0, 1.0);
+
+        let bsdf = material.evaluate_bsdf(&light_dir, &view_dir, &normal, &Vector3::new(0.0, 1.0, 0.0), &mut cache);
+
+        assert!((bsdf.x - bsdf.y).abs() < 1e-4);
+        assert!((bsdf.y - bsdf.z).abs() < 1e-4);
     }
 }

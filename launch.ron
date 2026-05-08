@@ -1,5 +1,5 @@
 RenderOptions(
-    scene_file: "/Users/emilnorden/models/glass_test/glass_test.gltf",
+    scene_file: "/Users/emilnorden/models/cars/direct.gltf",
     output_folder: "output",
     resolution: Resolution(
         width: 1024,

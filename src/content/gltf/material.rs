@@ -48,7 +48,10 @@ pub fn create_material(material: &gltf::Material, folder: &Path) -> anyhow::Resu
     let roughness = material.pbr_metallic_roughness().roughness_factor();
     let metallic = material.pbr_metallic_roughness().metallic_factor();
 
-    let transmission_factor = 1.0 - base_color[3];
+    let transmission_factor = material
+        .transmission()
+        .map(|transmission| transmission.transmission_factor())
+        .unwrap_or(0.0);
     let ior = material.ior().unwrap_or(1.5);
     const EMISSIVE_SCALE: f32 = 1.0; // TODO: This is a hack to make emissive materials more visible. Should probably be exposed as a parameter.
     let emissive_strength = material.emissive_strength().unwrap_or(0.0) * EMISSIVE_SCALE;
