@@ -1,9 +1,18 @@
 use nalgebra::Vector3;
 
+#[derive(Copy, Clone, Debug)]
+pub enum WrapMode {
+    ClampToEdge,
+    Repeat,
+    MirroredRepeat,
+}
+
+
 pub struct Texture {
     pixels: Vec<u8>,
     width: u32,
     height: u32,
+    wrap_mode: WrapMode,
 }
 
 #[allow(dead_code)]
@@ -23,19 +32,36 @@ impl Channel {
 }
 
 impl Texture {
-    pub fn new(pixels: Vec<u8>, width: u32, height: u32) -> Self {
+    pub fn new(pixels: Vec<u8>, width: u32, height: u32, wrap_mode: WrapMode) -> Self {
         assert!(width > 0 && height > 0, "texture dimensions must be non-zero");
         assert_eq!(pixels.len(), width as usize * height as usize * 4);
         Self {
             pixels,
             width,
             height,
+            wrap_mode
         }
     }
 
-    pub fn sample_color(&self, u: f32, v: f32) -> Vector3<f32> {
+    pub fn sample_color(&self, mut u: f32, mut v: f32) -> Vector3<f32> {
         assert!(u.is_finite(), "u is not finite: {}", u);
         assert!(v.is_finite(), "v is not finite: {}", v);
+
+        // TODO: This function could probably be optimized a bit.
+        match self.wrap_mode {
+            WrapMode::ClampToEdge => {
+                u = u.clamp(0.0, 1.0);
+                v = v.clamp(0.0, 1.0);
+            },
+            WrapMode::Repeat => {
+                u = u.fract();
+                v = v.fract();
+            },
+            WrapMode::MirroredRepeat => {
+                u = (u.fract() + 0.5).fract();
+                v = (v.fract() + 0.5).fract();
+            }
+        }
 
         // Clamp to avoid edge cases where u or v is exactly 1.0.
         let x = ((u.clamp(0.0, 1.0) * self.width as f32) as usize).min(self.width as usize - 1);

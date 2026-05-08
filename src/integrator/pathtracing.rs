@@ -31,8 +31,8 @@ impl PathTracingIntegrator {
         eta_stack: &mut StaticStack<f32, 8>,
         ctx: &Context
     ) -> Vector3<f32> {
-        let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
-        let v = hit.intersection.tex_coord.y.rem_euclid(1.0);
+        let u = hit.intersection.tex_coord.x; //.rem_euclid(1.0);
+        let v = hit.intersection.tex_coord.y; //.rem_euclid(1.0);
         let tex_coords = Vector2::new(u, v);
         let mut cached_textures = CachedTextureLookups::new(&hit.material, tex_coords);
         let albedo = cached_textures.albedo();
@@ -55,7 +55,7 @@ impl PathTracingIntegrator {
                 let cos_theta = normal.dot(&light_dir).max(0.0);
                 let cos_theta_light = light_sample.wi.dot(&(-light_dir)).max(0.0);
                 if cos_theta > 0.0 && cos_theta_light > 0.0 {
-                    // Cast shadow ray to check visibility
+                    // Determine transmission of light between surface and light source
                     let transmission = scene.transmission_along_path(surface_point, light_point, ctx);
                     if transmission > 0.0 {
                         let view_dir = -ray.direction();

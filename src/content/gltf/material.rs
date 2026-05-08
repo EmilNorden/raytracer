@@ -1,13 +1,19 @@
 use crate::scene::material::Material;
-use crate::scene::texture::Texture;
+use crate::scene::texture::{Texture, WrapMode};
 use gltf::image::Source;
 use gltf::material::NormalTexture;
 use gltf::texture;
 use nalgebra::Vector3;
 use std::path::Path;
+use gltf::texture::WrappingMode;
 
 fn create_texture_internal(texture: &texture::Texture, folder: &Path) -> Texture {
     let source = texture.source();
+    let wrap_mode = match texture.sampler().wrap_s() {
+        WrappingMode::ClampToEdge => WrapMode::ClampToEdge,
+        WrappingMode::MirroredRepeat => WrapMode::MirroredRepeat,
+        WrappingMode::Repeat => WrapMode::Repeat,
+    };
 
     match source.source() {
         Source::View { .. } => panic!("Unexpected source: view"),
@@ -18,7 +24,7 @@ fn create_texture_internal(texture: &texture::Texture, folder: &Path) -> Texture
                 Ok(img) => img,
                 Err(e) => panic!("Failed to load image {}. Error: {}", image_path.display(), e)
             };
-            Texture::new(img.to_rgba8().to_vec(), img.width(), img.height())
+            Texture::new(img.to_rgba8().to_vec(), img.width(), img.height(), wrap_mode)
         }
     }
 }
@@ -47,6 +53,7 @@ pub fn create_material(material: &gltf::Material, folder: &Path) -> anyhow::Resu
     let base_color = material.pbr_metallic_roughness().base_color_factor();
     let roughness = material.pbr_metallic_roughness().roughness_factor();
     let metallic = material.pbr_metallic_roughness().metallic_factor();
+
 
     let transmission_factor = material
         .transmission()
