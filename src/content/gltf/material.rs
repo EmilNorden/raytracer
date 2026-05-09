@@ -6,8 +6,9 @@ use gltf::texture;
 use nalgebra::Vector3;
 use std::path::Path;
 use gltf::texture::WrappingMode;
+use crate::context::Context;
 
-fn create_texture_internal(texture: &texture::Texture, folder: &Path) -> Texture {
+fn create_texture_internal(texture: &texture::Texture, folder: &Path, ctx: &Context) -> Texture {
     let source = texture.source();
     let wrap_mode = match texture.sampler().wrap_s() {
         WrappingMode::ClampToEdge => WrapMode::ClampToEdge,
@@ -24,31 +25,32 @@ fn create_texture_internal(texture: &texture::Texture, folder: &Path) -> Texture
                 Ok(img) => img,
                 Err(e) => panic!("Failed to load image {}. Error: {}", image_path.display(), e)
             };
+            ctx.mem.texture_memory_bytes(img.width() as u64 * img.height() as u64 * 4);
             Texture::new(img.to_rgba8().to_vec(), img.width(), img.height(), wrap_mode)
         }
     }
 }
-fn create_normal_texture(texture: &Option<NormalTexture>, folder: &Path) -> Option<Texture> {
+fn create_normal_texture(texture: &Option<NormalTexture>, folder: &Path, ctx: &Context) -> Option<Texture> {
     texture.as_ref().map(|x| {
         let texture = x.texture();
-        create_texture_internal(&texture, folder)
+        create_texture_internal(&texture, folder, ctx)
     })
 }
 
-fn create_texture(texture: &Option<texture::Info<'_>>, folder: &Path) -> Option<Texture> {
+fn create_texture(texture: &Option<texture::Info<'_>>, folder: &Path, ctx: &Context) -> Option<Texture> {
     texture.as_ref().map(|x| {
         let texture = x.texture();
-        create_texture_internal(&texture, folder)
+        create_texture_internal(&texture, folder, ctx)
     })
 }
 
-pub fn create_material(material: &gltf::Material, folder: &Path) -> anyhow::Result<Material> {
-    let albedo_texture = create_texture(&material.pbr_metallic_roughness().base_color_texture(), folder);
-    let emissive_texture = create_texture(&material.emissive_texture(), folder);
+pub fn create_material(material: &gltf::Material, folder: &Path, ctx: &Context) -> anyhow::Result<Material> {
+    let albedo_texture = create_texture(&material.pbr_metallic_roughness().base_color_texture(), folder, ctx);
+    let emissive_texture = create_texture(&material.emissive_texture(), folder, ctx);
     let normal_texture = material.normal_texture();
-    let normal_map = create_normal_texture(&normal_texture, folder);
+    let normal_map = create_normal_texture(&normal_texture, folder, ctx);
     let normal_scale = normal_texture.as_ref().map_or(1.0, |x| x.scale());
-    let metallic_roughness_texture = create_texture(&material.pbr_metallic_roughness().metallic_roughness_texture(), folder);
+    let metallic_roughness_texture = create_texture(&material.pbr_metallic_roughness().metallic_roughness_texture(), folder, ctx);
 
     let base_color = material.pbr_metallic_roughness().base_color_factor();
     let roughness = material.pbr_metallic_roughness().roughness_factor();

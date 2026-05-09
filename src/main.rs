@@ -9,6 +9,7 @@ use winit::window::{Window, WindowId};
 
 use raytracer::content::gltf::loader::GltfLoader;
 use raytracer::content::scene_loader::SceneLoader;
+use raytracer::context::Context;
 use raytracer::integrator::integrator::create;
 use raytracer::options::RenderOptions;
 use raytracer::render_controller::RenderController;
@@ -144,7 +145,11 @@ fn read_options() -> anyhow::Result<RenderOptions> {
 fn main() {
     let options = read_options().unwrap();
     println!("Using the following options:\n{}", options);
-    let (scene, animation_controller) = GltfLoader::load_scene(&options.scene_file, &options).unwrap();
+
+    let ctx = Context::new();
+    let (scene, animation_controller) = GltfLoader::load_scene(&options.scene_file, &options, &ctx).unwrap();
+
+    ctx.mem.print_summary();
 
     if scene.lights().is_empty() {
         println!("No light sources found in scene. Aborting");
@@ -160,7 +165,7 @@ fn main() {
 
     println!("Rendering using {} thread(s)", rayon::current_num_threads());
 
-    let render_controller = RenderController::start(options, scene, animation_controller, integrator);
+    let render_controller = RenderController::start(options, scene, animation_controller, integrator, ctx);
 
     let mut app = App {
         width,

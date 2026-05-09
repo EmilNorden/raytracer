@@ -1,9 +1,11 @@
 pub mod diagnostics;
 mod statistics;
+mod memory;
 
 pub struct Context {
     pub diag: diagnostics::Diagnostics,
     pub stats: statistics::Statistics,
+    pub mem: memory::Memory,
 }
 
 impl Context {
@@ -11,6 +13,7 @@ impl Context {
         Self {
             diag: diagnostics::Diagnostics::new(),
             stats: statistics::Statistics::new(),
+            mem: memory::Memory::new(),
         }
     }
 

@@ -34,11 +34,10 @@ impl RenderController {
         mut scene: Scene,
         mut animation_controller: AnimationController,
         integrator: IntegratorImpl,
+        ctx: Context,
     ) -> Self {
         let (update_tx, update_rx) = mpsc::channel();
         let (command_tx, command_rx) = mpsc::channel();
-
-        let ctx = Context::new();
 
         let worker = thread::spawn(move || {
             let mut frame = Frame::new(options.resolution.width, options.resolution.height);
