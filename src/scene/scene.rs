@@ -32,7 +32,7 @@ impl Display for Scene {
 impl Scene {
     pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, mut lights: Vec<LightSource>) -> Self {
         for mesh in &meshes {
-            if mesh.material().emissive_factor() != Vector3::zeros() {
+            if mesh.material().emissive_factor().x > 0.0 || mesh.material().emissive_factor().y > 0.0 || mesh.material().emissive_factor().z > 0.0 {
                 lights.push(LightSource::Mesh(mesh.clone()));
             }
         }
