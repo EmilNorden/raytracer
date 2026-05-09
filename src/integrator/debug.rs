@@ -32,7 +32,8 @@ impl Integrator for DebugIntegrator {
                         let u = hit.intersection.tex_coord.x.rem_euclid(1.0);
                         let v = hit.intersection.tex_coord.y.rem_euclid(1.0);
                         let tex_coords = Vector2::new(u, v);
-                        let normal = hit.material.apply_normal_map(hit.intersection.normal, hit.intersection.tangent, tex_coords);
+                        let material = &scene.materials()[hit.material_index as usize];
+                        let normal = material.apply_normal_map(hit.intersection.normal, hit.intersection.tangent, tex_coords);
 
                         pixels[x] += normal;
                     }

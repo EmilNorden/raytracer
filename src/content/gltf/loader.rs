@@ -104,7 +104,7 @@ impl GltfLoader {
         Point3::new(transform[(0, 3)], transform[(1, 3)], transform[(2, 3)])
     }
 
-    fn create_mesh_data(buffers: &Vec<Data>, mesh: &gltf::mesh::Mesh, material_map: &mut Vec<Option<Arc<Material>>>, folder: &Path) -> anyhow::Result<Vec<Arc<MeshData>>> {
+    fn create_mesh_data(buffers: &Vec<Data>, mesh: &gltf::mesh::Mesh, materials: &mut Vec<Material>, material_map: &mut Vec<Option<u32>>, folder: &Path) -> anyhow::Result<Vec<Arc<MeshData>>> {
         let mut meshes = Vec::new();
 
         for primitive in mesh.primitives() {
@@ -112,7 +112,18 @@ impl GltfLoader {
                 return Err(SceneError::UnsupportedFormat("Only triangles are supported".to_string()).into());
             }
 
-            let material = create_material(&primitive.material(), folder)?;
+            /* Turns out that if a mesh has no material, the GLTF crate I am using will create a default material.
+            I have to "pretend" that the default material is at index 0 in the json structure, which is why i offset all existing indices by 1*/
+            let material_node_index = primitive.material().index().map(|idx| idx + 1).unwrap_or(0);
+
+            let material_index = if material_map[material_node_index].is_some() {
+                material_map[material_node_index].unwrap()
+            } else {
+                materials.push(create_material(&primitive.material(), folder)?);
+                material_map[material_node_index] = Some(materials.len() as u32 - 1);
+
+                materials.len() as u32 - 1
+            };
 
             let reader = primitive.reader(|buffer| {
                 Some(&buffers[buffer.index()].0)
@@ -171,16 +182,16 @@ impl GltfLoader {
                 tri_indices.push([i0, i1, i2]);
             }
 
-            meshes.push(Arc::new(MeshData::new(vertices, tri_indices, material)));
+            meshes.push(Arc::new(MeshData::new(vertices, tri_indices, material_index)));
         }
 
         Ok(meshes)
     }
 
-    fn create_scene_node(node: &Node, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, mesh_data_map: &mut Vec<Option<Vec<Arc<MeshData>>>>, material_data_map: &mut Vec<Option<Arc<Material>>>, folder: &Path, parent_transform: &Matrix4<f32>, options: &RenderOptions) -> anyhow::Result<SceneNode> {
+    fn create_scene_node(node: &Node, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, mesh_data_map: &mut Vec<Option<Vec<Arc<MeshData>>>>, materials: &mut Vec<Material>, material_map: &mut Vec<Option<u32>>, folder: &Path, parent_transform: &Matrix4<f32>, options: &RenderOptions) -> anyhow::Result<SceneNode> {
         let transform = parent_transform * Matrix4::from(node.transform().matrix());
         let children = node.children().map(|child|{
-            Self::create_scene_node(&child, buffers, cameras, lights, meshes, mesh_data_map, material_data_map, folder, &transform, options)
+            Self::create_scene_node(&child, buffers, cameras, lights, meshes, mesh_data_map, materials, material_map, folder, &transform, options)
         }).collect::<anyhow::Result<Vec<SceneNode>>>()?;
 
         let mut mesh_indices = Vec::new();
@@ -188,7 +199,7 @@ impl GltfLoader {
             let mesh_data = if mesh_data_map[mesh.index()].is_some() {
                 mesh_data_map[mesh.index()].clone().unwrap()
             } else {
-                let data = Self::create_mesh_data(&buffers, &mesh, material_data_map, folder)?;
+                let data = Self::create_mesh_data(&buffers, &mesh, materials, material_map, folder)?;
                 mesh_data_map[mesh.index()] = Some(data.clone());
                 data
             };
@@ -259,12 +270,12 @@ impl GltfLoader {
     }
 
 
-    fn load_node_graph(scene: &gltf::scene::Scene, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, folder: &Path, total_mesh_count: usize, total_material_count: usize, options: &RenderOptions) -> anyhow::Result<NodeGraph> {
+    fn load_node_graph(scene: &gltf::scene::Scene, buffers: &Vec<Data>, cameras: &mut Vec<PerspectiveCamera>, lights: &mut Vec<LightSource>, meshes: &mut Vec<MeshInstance>, materials: &mut Vec<Material>, folder: &Path, total_mesh_count: usize, total_material_count: usize, options: &RenderOptions) -> anyhow::Result<NodeGraph> {
         let mut mesh_data_map :Vec<Option<Vec<Arc<MeshData>>>> = vec![None; total_mesh_count];
-        let mut material_map : Vec<Option<Arc<Material>>> = vec![None; total_material_count];
+        let mut material_map : Vec<Option<u32>> = vec![None; total_material_count + 1];
 
         let nodes = scene.nodes().map(|node|{
-            Self::create_scene_node(&node, buffers, cameras, lights, meshes, &mut mesh_data_map, &mut material_map, folder, &Matrix4::identity(), options)
+            Self::create_scene_node(&node, buffers, cameras, lights, meshes, &mut mesh_data_map, materials, &mut material_map, folder, &Matrix4::identity(), options)
         }).collect::<anyhow::Result<Vec<SceneNode>>>()?;
 
         Ok(NodeGraph::new(nodes))
@@ -337,12 +348,13 @@ impl SceneLoader for GltfLoader {
             let mut cameras = Vec::new();
             let mut lights = Vec::new();
             let mut meshes = Vec::new();
-            let node_graph = Self::load_node_graph(&scene, &buffers, &mut cameras, &mut lights, &mut meshes, parent_folder, document.meshes().len(), document.materials().len(), options)?;
+            let mut materials = Vec::new();
+            let node_graph = Self::load_node_graph(&scene, &buffers, &mut cameras, &mut lights, &mut meshes, &mut materials, parent_folder, document.meshes().len(), document.materials().len(), options)?;
             let animations = Self::load_animations(&document, &buffers)?;
 
             if cameras.is_empty() { return Err(SceneError::NoCameras.into()); }
 
-            let scene = Scene::new(cameras, meshes, lights);
+            let scene = Scene::new(cameras, meshes, materials, lights);
             println!("Loaded scene {}", scene);
 
             Ok((scene, AnimationController::new(node_graph, animations)))

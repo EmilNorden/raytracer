@@ -408,21 +408,7 @@ mod tests {
     }
 
     fn make_mesh(translation: Vector3<f32>) -> MeshInstance {
-        let material = Material::new(
-            Vector3::zeros(),
-            None,
-            None,
-            None,
-            None,
-            1.0,
-            Vector3::zeros(),
-            0.0,
-            0.0,
-            0.0,
-            1.5,
-        );
-
-        let data = Arc::new(MeshData::new(make_triangle_vertices(), vec![[0, 1, 2]], material));
+        let data = Arc::new(MeshData::new(make_triangle_vertices(), vec![[0, 1, 2]], 0));
         let transform = Matrix4::new_translation(&translation);
 
         MeshInstance::new(data, transform)

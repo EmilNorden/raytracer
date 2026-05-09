@@ -7,12 +7,14 @@ use crate::scene::light::LightSource;
 use crate::scene::{Intersectable, Shadeable, ShadingContext};
 use nalgebra::{Point3, Vector3};
 use crate::context::Context;
+use crate::scene::material::Material;
 
 pub struct Scene {
     cameras : Vec<PerspectiveCamera>,
     meshes: Vec<MeshInstance>,
     bvh: BVH,
     lights: Vec<LightSource>,
+    materials: Vec<Material>,
 }
 
 pub struct LightSample {
@@ -30,9 +32,10 @@ impl Display for Scene {
 }
 
 impl Scene {
-    pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, mut lights: Vec<LightSource>) -> Self {
+    pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, materials: Vec<Material>, mut lights: Vec<LightSource>) -> Self {
         for mesh in &meshes {
-            if mesh.material().emissive_factor().x > 0.0 || mesh.material().emissive_factor().y > 0.0 || mesh.material().emissive_factor().z > 0.0 {
+            let material = &materials[mesh.material_index() as usize];
+            if material.emissive_factor().x > 0.0 || material.emissive_factor().y > 0.0 || material.emissive_factor().z > 0.0 {
                 lights.push(LightSource::Mesh(mesh.clone()));
             }
         }
@@ -45,6 +48,7 @@ impl Scene {
             meshes,
             bvh,
             lights,
+            materials,
         }
     }
 
@@ -64,15 +68,17 @@ impl Scene {
         &mut self.meshes
     }
 
+    pub fn materials(&self) -> &[Material] { &self.materials }
+
     pub fn lights_mut(&mut self) -> &mut [LightSource] {
         &mut self.lights
     }
 
-    pub fn intersect(&'_ self, ray: &Ray, ctx: &Context) -> Option<ShadingContext<'_>> {
+    pub fn intersect(&'_ self, ray: &Ray, ctx: &Context) -> Option<ShadingContext> {
        self.bvh.intersect(self.meshes.as_slice(), ray, ctx).map(|(mesh_index, hit)| {
             ShadingContext {
                 intersection: hit,
-                material: self.meshes[mesh_index as usize].material(),
+                material_index: self.meshes[mesh_index as usize].material_index(),
             }
         })
     }
@@ -142,8 +148,8 @@ impl Scene {
 
                 let (point, normal) = triangle.sample_uniform_point(rng);
 
-
-                let radiance = mesh.material().emissive_factor();
+                let material = &self.materials[mesh.material_index() as usize];
+                let radiance = material.emissive_factor();
 
                 // PDF is 1/area. For now, use a rough estimate
                 let bounds = mesh.bounds();
@@ -177,7 +183,7 @@ impl Scene {
             self.bvh.intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max, ctx) {
 
             let mesh = &self.meshes[mesh_index as usize];
-            let material = mesh.material();
+            let material = &self.materials[mesh.material_index() as usize];
             if material.transmission_factor() > 0.0 {
                 let transformed_bounds = mesh.bounds().transform(mesh.transform());
                 let new_p1 = ray.origin() + (ray.direction() * transformed_bounds.intersect(&ray).unwrap().tmax);

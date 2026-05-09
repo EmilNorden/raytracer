@@ -19,9 +19,9 @@ pub struct Intersection {
 
 }
 
-pub struct ShadingContext<'a> {
+pub struct ShadingContext {
     pub intersection: Intersection,
-    pub material: &'a Material,
+    pub material_index: u32,
 }
 
 pub trait Intersectable {
@@ -32,7 +32,7 @@ pub trait Intersectable {
 }
 
 pub trait Shadeable {
-    fn material(&self) -> &Material;
+    fn material_index(&self) -> u32;
 }
 
 pub struct Sphere {
@@ -79,11 +79,5 @@ impl Intersectable for Sphere {
 
     fn transform(&self) -> &Matrix4<f32> {
         unimplemented!()
-    }
-}
-
-impl Shadeable for Sphere {
-    fn material(&self) -> &Material {
-        &self.material
     }
 }

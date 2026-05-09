@@ -12,12 +12,12 @@ pub struct MeshData {
     vertices: Vec<Vertex>,
     tri_indices: Vec<[u32; 3]>,
     kd_tree: KDTree,
-    material: Material,
+    material_index: u32,
 }
 
 
 impl MeshData {
-    pub fn new(vertices: Vec<Vertex>, tri_indices: Vec<[u32; 3]>, material: Material) -> Self
+    pub fn new(vertices: Vec<Vertex>, tri_indices: Vec<[u32; 3]>, material_index: u32) -> Self
     where
     {
         let intersect_triangles = tri_indices.iter().map(|tri_indices| {
@@ -33,11 +33,11 @@ impl MeshData {
         let kd_tree = KDTree::new(&vertices, &tri_indices);
 
         Self {
-            intersect_triangles: intersect_triangles,
+            intersect_triangles,
             vertices,
             tri_indices,
             kd_tree,
-            material
+            material_index,
         }
     }
 
@@ -197,8 +197,8 @@ impl Intersectable for MeshInstance {
 }
 
 impl Shadeable for MeshInstance {
-    fn material(&self) -> &Material {
-        &self.data.material
+    fn material_index(&self) -> u32 {
+        self.data.material_index
     }
 }
 
@@ -217,8 +217,7 @@ mod tests {
             Vertex { position: Point3::new(1.0, -1.0, 1.0), uv: Vector2::zeros(), normal: Vector3::new(0.0, 0.0, 1.0), tangent },
         ];
         let tri_indices = vec![[0, 1, 2], [1, 3, 2]];
-        let material = Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.5);
-        Arc::new(MeshData::new(vertices, tri_indices, material))
+        Arc::new(MeshData::new(vertices, tri_indices, 0))
     }
     #[test]
     fn intersect_should_return_distance_in_world_space() {
@@ -304,7 +303,7 @@ mod tests {
 
         let material = Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.5);
         let mesh = MeshInstance::new(
-            Arc::new(MeshData::new(triangle.to_vec(), vec![[0, 1, 2]], material)),
+            Arc::new(MeshData::new(triangle.to_vec(), vec![[0, 1, 2]], 0)),
             Matrix4::identity(),
         );
 
