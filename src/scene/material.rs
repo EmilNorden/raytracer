@@ -581,10 +581,11 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
 
 #[cfg(test)]
 mod tests {
+    use crate::scene::texture::WrapMode;
     use super::*;
 
     fn solid_texture(rgb: [u8; 3]) -> Texture {
-        Texture::new(vec![rgb[0], rgb[1], rgb[2], 255], 1, 1)
+        Texture::new(vec![rgb[0], rgb[1], rgb[2], 255], 1, 1, WrapMode::ClampToEdge)
     }
 
     fn make_material(normal_map: Option<Texture>, normal_scale: f32) -> Material {
