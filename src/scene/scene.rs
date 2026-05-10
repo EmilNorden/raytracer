@@ -7,6 +7,7 @@ use crate::scene::light::LightSource;
 use crate::scene::{Intersectable, Shadeable, ShadingContext};
 use nalgebra::{Point3, Vector3};
 use crate::context::Context;
+use crate::math::lerp;
 use crate::scene::material::Material;
 
 pub struct Scene {
@@ -103,20 +104,37 @@ impl Scene {
 
         match light {
             LightSource::Point(point_light) => {
-                let u = (rng.random::<f32>() * 2.0) - 1.0;
-                let v = (rng.random::<f32>() * 2.0) - 1.0;
-                let w = (rng.random::<f32>() * 2.0) - 1.0;
-                let point = point_light.position + (Vector3::new(u, v, w) * point_light.radius);
-                let normal = (point - point_light.position).normalize();
+                let radiance = point_light.color * point_light.intensity;
 
+                if point_light.radius <= 0.0 {
+                    return Some(LightSample {
+                        wi: Vector3::zeros(),
+                        radiance,
+                        pdf: 1.0,
+                        is_delta: true,
+                        position: Some(point_light.position),
+                    });
+                }
+
+                let direction = loop {
+                    let u = (rng.random::<f32>() * 2.0) - 1.0;
+                    let v = (rng.random::<f32>() * 2.0) - 1.0;
+                    let w = (rng.random::<f32>() * 2.0) - 1.0;
+                    let candidate = Vector3::new(u, v, w);
+                    if candidate.norm_squared() > 1e-12 {
+                        break candidate.normalize();
+                    }
+                };
+
+                let point = point_light.position + direction * point_light.radius;
+                let normal = direction;
                 let area = 4.0 * std::f32::consts::PI * point_light.radius * point_light.radius;
                 let pdf = 1.0 / area;
 
-                let radiance = point_light.color * point_light.intensity;
 
                 Some(LightSample {
                     wi: normal,
-                    radiance,
+                    radiance: radiance / area,
                     pdf,
                     is_delta: false,
                     position: Some(point),
@@ -168,11 +186,11 @@ impl Scene {
         }
     }
 
-    pub fn transmission_along_path(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> f32 {
+    pub fn transmission_along_path(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> Vector3<f32> {
         let direction = p2 - p1;
         let distance = direction.norm();
         if distance <= 1e-5 {
-            return 1.0;
+            return Vector3::new(1.0, 1.0, 1.0);
         }
 
         let ray = Ray::new(p1.into(), direction / distance);
@@ -184,19 +202,25 @@ impl Scene {
 
             let mesh = &self.meshes[mesh_index as usize];
             let material = &self.materials[mesh.material_index() as usize];
-            if material.transmission_factor() > 0.0 {
+            if material.transmission_factor() <= 0.0 {
+                return Vector3::zeros();
+            } else {
+                let tex_coords = hit.tex_coord;
+                // let albedo = material.sample_color(tex_coords.x, tex_coords.y);
+                let albedo = lerp(material.sample_color(tex_coords.x, tex_coords.y), Vector3::new(1.0, 1.0, 1.0), material.transmission_factor());
+                //let albedo =  (1.0 - material.transmission_factor()) * material.sample_color(tex_coords.x, tex_coords.y);
                 let transformed_bounds = mesh.bounds().transform(mesh.transform());
                 let new_p1 = ray.origin() + (ray.direction() * transformed_bounds.intersect(&ray).unwrap().tmax);
 
                 let subpath = self.transmission_along_path(new_p1, p2, ctx);
 
-                return material.transmission_factor() * subpath;
+                return (albedo * material.transmission_factor()).component_mul(&subpath);
             }
 
-            return 0.0;
+            return Vector3::zeros()
         }
 
-        1.0
+        Vector3::new(1.0, 1.0, 1.0)
     }
 
     fn transmission_along_path_inner(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> Option<f32> {

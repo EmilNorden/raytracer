@@ -2,6 +2,7 @@ use std::f32::consts::PI;
 use nalgebra::{Matrix3, Vector2, Vector3, Vector4};
 use rand::Rng;
 use crate::context::Context;
+use crate::math::lerp;
 use crate::scene::coordinate_system::CoordinateSystem;
 use crate::scene::texture::{Texture};
 use crate::static_stack::StaticStack;
@@ -192,9 +193,9 @@ impl Material {
         (dir, pdf)
     }*/
 
-    fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    /*fn lerp(a: f32, b: f32, t: f32) -> f32 {
         a + t * (b - a)
-    }
+    }*/
 
     // Refracts using Snell's law. eta_ratio is the ratio of indices of refraction (eta_i / eta_t)
     // Returns None if total internal reflection.
@@ -290,13 +291,12 @@ impl Material {
                     }
                     else {
                         eta_stack.push(self.ior);
-
                     }
                     // No absorption in the BSDF value for perfect transmission
                     // (absorption would be applied by distance traveled or volume rendering)
                     return BsdfSample {
                         direction: refracted_dir,
-                        bsdf_value: Vector3::new(1.0, 1.0, 1.0),
+                        bsdf_value: Vector3::repeat(self.transmission_factor),
                         pdf: self.transmission_factor * transmission_prob,
                         is_reflection: false,
                         is_transmission: true,
@@ -476,7 +476,7 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
 
     fn specular_sampling_probability(&self, f0: &Vector3<f32>) -> f32 {
         let max_f0 = f0.x.max(f0.y).max(f0.z);
-        Self::lerp(0.08, 0.95, max_f0).clamp(0.08, 0.95)
+        lerp(0.08, 0.95, max_f0).clamp(0.08, 0.95)
     }
 
     fn sample_ggx_half_vector(&self, normal: &Vector3<f32>, alpha: f32, rng: &mut impl Rng) -> Vector3<f32> {

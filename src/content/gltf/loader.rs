@@ -18,13 +18,30 @@ use gltf::khr_lights_punctual::Kind;
 use gltf::mesh::Mode;
 use gltf::Node;
 use nalgebra::{Matrix4, Point3, Quaternion, UnitQuaternion, Vector2, Vector3, Vector4};
+use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
 use crate::context::Context;
 
+#[derive(Deserialize)]
+struct PointLightExtras {
+    radius: Option<f32>,
+}
+
 pub struct GltfLoader{}
 
 impl GltfLoader {
+
+    fn extract_point_light_radius(light: &gltf::khr_lights_punctual::Light<'_>) -> f32 {
+        light
+            .extras()
+            .as_ref()
+            .and_then(|extras| {
+                gltf::json::deserialize::from_str::<PointLightExtras>(extras.get()).ok()
+            })
+            .and_then(|extras| extras.radius)
+            .unwrap_or(0.0)
+    }
 
     fn build_fallback_tangents(
         positions: &[Point3<f32>],
@@ -218,10 +235,11 @@ impl GltfLoader {
                 Kind::Point => {
                     let position = Self::extract_translation(&transform);
                     let intensity = light.intensity();
+                    let radius = Self::extract_point_light_radius(&light);
 
                     let color = light.color();
                     light_index = Some(lights.len());
-                    lights.push(LightSource::Point(PointLight::new(position, Vector3::new(color[0], color[1], color[2]), intensity, 1.0)))
+                    lights.push(LightSource::Point(PointLight::new(position, Vector3::new(color[0], color[1], color[2]), intensity, radius)))
                 },
                 Kind::Directional => {
                     let direction = transform.transform_vector(&Vector3::new(0.0, 0.0, -1.0));
