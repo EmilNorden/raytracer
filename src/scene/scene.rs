@@ -139,7 +139,6 @@ impl Scene {
                     is_delta: false,
                     position: Some(point),
                 })
-                //Some((point, normal, emissive, pdf))
 
             },
             LightSource::Directional(directional_light) => {
@@ -216,15 +215,9 @@ impl Scene {
 
                 return (albedo * material.transmission_factor()).component_mul(&subpath);
             }
-
-            return Vector3::zeros()
         }
 
         Vector3::new(1.0, 1.0, 1.0)
-    }
-
-    fn transmission_along_path_inner(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> Option<f32> {
-        unimplemented!()
     }
 
     /// Check if there's an unoccluded path between two points

@@ -56,16 +56,20 @@ impl PathTracingIntegrator {
                         let light_dir = to_light.normalize();
                         let cos_theta = normal.dot(&light_dir).max(0.0);
 
-                        let transmission = scene.transmission_along_path(surface_point, light_point, ctx);
-                        if cos_theta > 0.0 && math::is_greater_than_zero(transmission) {
-                            let view_dir = -ray.direction();
-                            let brdf = material
-                                .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, &mut cached_textures);
 
-                            direct_light = (light_sample.radiance / distance_sq)
-                                .component_mul(&brdf)
-                                .component_mul(&transmission)
-                                * cos_theta;
+                        if cos_theta > 0.0 {
+                            let transmission = scene.transmission_along_path(surface_point, light_point, ctx);
+
+                            if math::is_greater_than_zero(transmission) {
+                                let view_dir = -ray.direction();
+                                let brdf = material
+                                    .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, &mut cached_textures);
+
+                                direct_light = (light_sample.radiance / distance_sq)
+                                    .component_mul(&brdf)
+                                    .component_mul(&transmission)
+                                    * cos_theta;
+                            }
                         }
                     }
                 } else {
@@ -96,14 +100,16 @@ impl PathTracingIntegrator {
                 let cos_theta = normal.dot(&light_dir).max(0.0);
                 let cos_theta_light = light_sample.wi.dot(&(-light_dir)).max(0.0);
 
-                let transmission = scene.transmission_along_path(surface_point, light_point, ctx);
-                if cos_theta > 0.0 && cos_theta_light > 0.0 && math::is_greater_than_zero(transmission) {
-                    let view_dir = -ray.direction();
-                    let brdf = material
+                if cos_theta > 0.0 && cos_theta_light > 0.0 {
+                    let transmission = scene.transmission_along_path(surface_point, light_point, ctx);
+                    if math::is_greater_than_zero(transmission) {
+                        let view_dir = -ray.direction();
+                        let brdf = material
                             .evaluate_bsdf(&light_dir, &view_dir, &normal, &albedo, &mut cached_textures);
-                    direct_light = (light_sample.radiance * (cos_theta_light / (distance_sq * light_sample.pdf)))
-                        .component_mul(&brdf).component_mul(&transmission)
-                        * cos_theta;
+                        direct_light = (light_sample.radiance * (cos_theta_light / (distance_sq * light_sample.pdf)))
+                            .component_mul(&brdf).component_mul(&transmission)
+                            * cos_theta;
+                    }
                 }
             }
 

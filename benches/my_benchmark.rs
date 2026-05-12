@@ -36,7 +36,7 @@ fn bench_render(c: &mut Criterion) {
         let ctx = Context::new();
 
         let (scene, _animation_controller) =
-            GltfLoader::load_scene(&options.scene_file, &options).unwrap();
+            GltfLoader::load_scene(&options.scene_file, &options, &ctx).unwrap();
         let integrator = IntegratorImpl::Pathtracing(PathTracingIntegrator::new());
 
         group.bench_with_input(BenchmarkId::new("path_tracer", name), &options, |b, opts| {
