@@ -1,11 +1,11 @@
 RenderOptions(
-    scene_file: "/Users/emilnorden/models/cars/direct.gltf",
+    scene_file: "/Users/emilnorden/models/trans/direct.gltf",
     output_folder: "output",
     resolution: Resolution(
         width: 1024,
         height: 768,
     ),
-    samples: 100,
+    samples: 10,
     debug: false,
     max_bounces: 4,
     video: false,

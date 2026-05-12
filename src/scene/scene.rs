@@ -4,7 +4,7 @@ use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::MeshInstance;
 use crate::core::Ray;
 use crate::scene::light::LightSource;
-use crate::scene::{Intersectable, Shadeable, ShadingContext};
+use crate::scene::{Intersectable, Intersection, Shadeable, ShadingContext};
 use nalgebra::{Point3, Vector3};
 use crate::context::Context;
 use crate::math::lerp;
@@ -26,6 +26,60 @@ pub struct LightSample {
     pub position: Option<Point3<f32>>,
 }
 
+pub struct PathIntersection {
+    pub mesh_index: u32,
+    pub intersection: Intersection,
+    pub material_index: u32,
+}
+
+pub struct PathIntersectionsIter<'a> {
+    scene: &'a Scene,
+    ray: Ray,
+    t_min: f32,
+    t_max: f32,
+    ctx: &'a Context,
+    done: bool,
+    hit_count: usize,
+}
+
+impl<'a> Iterator for PathIntersectionsIter<'a> {
+    type Item = PathIntersection;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        const MAX_INTERSECTIONS: usize = 128;
+        const RAY_EPSILON: f32 = 1e-4;
+
+        if self.done || self.hit_count >= MAX_INTERSECTIONS || self.t_min >= self.t_max {
+            self.done = true;
+            return None;
+        }
+
+        let Some((mesh_index, hit)) = self
+            .scene
+            .bvh
+            .intersect_with_limits(self.scene.meshes.as_slice(), &self.ray, self.t_min, self.t_max, self.ctx)
+        else {
+            self.done = true;
+            return None;
+        };
+
+        self.hit_count += 1;
+        let next_t_min = (hit.dist + RAY_EPSILON).max(self.t_min + RAY_EPSILON);
+        if !next_t_min.is_finite() || next_t_min >= self.t_max {
+            self.done = true;
+        } else {
+            self.t_min = next_t_min;
+        }
+
+        let material_index = self.scene.meshes[mesh_index as usize].material_index();
+        Some(PathIntersection {
+            mesh_index,
+            intersection: hit,
+            material_index,
+        })
+    }
+}
+
 impl Display for Scene {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Scene with {} cameras, {} meshes, {} lights. Total triangles: {}", self.cameras.len(), self.meshes.len(), self.lights.len(), self.triangle_count())
@@ -33,6 +87,32 @@ impl Display for Scene {
 }
 
 impl Scene {
+    pub fn intersections_along_path<'a>(&'a self, start: Point3<f32>, end: Point3<f32>, ctx: &'a Context) -> PathIntersectionsIter<'a> {
+        let direction = end - start;
+        let distance = direction.norm();
+
+        let (ray, t_min, t_max, done) = if distance <= 1e-5 {
+            // Dummy ray; iterator is immediately exhausted when start/end are identical.
+            (Ray::new(start, Vector3::new(1.0, 0.0, 0.0)), 0.0, 0.0, true)
+        } else {
+            let ray = Ray::new(start, direction / distance);
+            let t_min = 0.001;
+            let t_max = (distance - 0.001).max(0.0);
+            let done = t_max <= t_min;
+            (ray, t_min, t_max, done)
+        };
+
+        PathIntersectionsIter {
+            scene: self,
+            ray,
+            t_min,
+            t_max,
+            ctx,
+            done,
+            hit_count: 0,
+        }
+    }
+
     pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, materials: Vec<Material>, mut lights: Vec<LightSource>) -> Self {
         for mesh in &meshes {
             let material = &materials[mesh.material_index() as usize];
@@ -131,7 +211,6 @@ impl Scene {
                 let area = 4.0 * std::f32::consts::PI * point_light.radius * point_light.radius;
                 let pdf = 1.0 / area;
 
-
                 Some(LightSample {
                     wi: normal,
                     radiance: radiance / area,
@@ -139,7 +218,6 @@ impl Scene {
                     is_delta: false,
                     position: Some(point),
                 })
-
             },
             LightSource::Directional(directional_light) => {
                 let normal = -directional_light.direction.normalize(); // Light comes from this direction
@@ -185,6 +263,29 @@ impl Scene {
         }
     }
 
+    pub fn transmissions_along_path_2(&self, start: Point3<f32>, end: Point3<f32>, ctx: &Context) -> Vector3<f32> {
+        let mut throughput = Vector3::new(1.0, 1.0, 1.0);
+
+        for intersection in self.intersections_along_path(start, end, ctx) {
+            let mesh = &self.meshes[intersection.mesh_index as usize];
+            let material = &self.materials[mesh.material_index() as usize];
+            let transmission = material.transmission_factor().clamp(0.0, 1.0);
+            if transmission <= 0.0 {
+                return Vector3::zeros();
+            }
+
+            let tex_coords = intersection.intersection.tex_coord;
+            let albedo = lerp(
+                material.sample_color(tex_coords.x, tex_coords.y),
+                Vector3::new(1.0, 1.0, 1.0),
+                transmission,
+            );
+            throughput = throughput.component_mul(&(albedo * transmission));
+        }
+
+        throughput
+    }
+
     pub fn transmission_along_path(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> Vector3<f32> {
         let direction = p2 - p1;
         let distance = direction.norm();
@@ -193,31 +294,54 @@ impl Scene {
         }
 
         let ray = Ray::new(p1.into(), direction / distance);
-        let t_min = 0.001;
+        let mut t_min = 0.001;
         let t_max = (distance - 0.001).max(0.0);
+        if t_max <= t_min {
+            return Vector3::new(1.0, 1.0, 1.0);
+        }
 
-        if let Some((mesh_index, hit)) =
-            self.bvh.intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max, ctx) {
+        const MAX_TRANSMISSION_HITS: usize = 128;
+        const RAY_EPSILON: f32 = 1e-4;
+
+        let mut throughput = Vector3::new(1.0, 1.0, 1.0);
+        let mut hit_count = 0usize;
+
+        while t_min < t_max && hit_count < MAX_TRANSMISSION_HITS {
+            let Some((mesh_index, hit)) =
+                self.bvh.intersect_with_limits(self.meshes.as_slice(), &ray, t_min, t_max, ctx)
+            else {
+                break;
+            };
+
+            hit_count += 1;
 
             let mesh = &self.meshes[mesh_index as usize];
             let material = &self.materials[mesh.material_index() as usize];
-            if material.transmission_factor() <= 0.0 {
+            let transmission = material.transmission_factor().clamp(0.0, 1.0);
+            if transmission <= 0.0 {
                 return Vector3::zeros();
-            } else {
-                let tex_coords = hit.tex_coord;
-                // let albedo = material.sample_color(tex_coords.x, tex_coords.y);
-                let albedo = lerp(material.sample_color(tex_coords.x, tex_coords.y), Vector3::new(1.0, 1.0, 1.0), material.transmission_factor());
-                //let albedo =  (1.0 - material.transmission_factor()) * material.sample_color(tex_coords.x, tex_coords.y);
-                let transformed_bounds = mesh.bounds().transform(mesh.transform());
-                let new_p1 = ray.origin() + (ray.direction() * transformed_bounds.intersect(&ray).unwrap().tmax);
-
-                let subpath = self.transmission_along_path(new_p1, p2, ctx);
-
-                return (albedo * material.transmission_factor()).component_mul(&subpath);
             }
+
+            let tex_coords = hit.tex_coord;
+            let albedo = lerp(
+                material.sample_color(tex_coords.x, tex_coords.y),
+                Vector3::new(1.0, 1.0, 1.0),
+                transmission,
+            );
+            throughput = throughput.component_mul(&(albedo * transmission));
+
+            let next_t_min = (hit.dist + RAY_EPSILON).max(t_min + RAY_EPSILON);
+            if !next_t_min.is_finite() {
+                break;
+            }
+            t_min = next_t_min;
         }
 
-        Vector3::new(1.0, 1.0, 1.0)
+        throughput
+    }
+
+    fn transmission_along_path_inner(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> Option<f32> {
+        unimplemented!()
     }
 
     /// Check if there's an unoccluded path between two points
