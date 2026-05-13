@@ -59,9 +59,9 @@ impl Frame {
             .iter()
             .flat_map(|p| {
                 [
-                    (p.x.clamp(0.0, 1.0) * 255.0).round() as u8,
-                    (p.y.clamp(0.0, 1.0) * 255.0).round() as u8,
-                    (p.z.clamp(0.0, 1.0) * 255.0).round() as u8,
+                    Self::to_display_u8(p.x),
+                    Self::to_display_u8(p.y),
+                    Self::to_display_u8(p.z),
                 ]
             })
             .collect();
