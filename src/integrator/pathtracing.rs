@@ -8,11 +8,17 @@ use crate::scene::ShadingContext;
 use crate::scene::material::{CachedTextureLookups, IOR_AIR};
 use crate::scene::scene::Scene;
 use crate::static_stack::StaticStack;
-use nalgebra::{Vector2, Vector3};
+use nalgebra::Vector3;
 use rand::Rng;
 use rayon::prelude::*;
 
 pub struct PathTracingIntegrator {}
+
+struct ShadeResult {
+    radiance: Vector3<f32>,
+    next_ray: Option<Ray>,
+    throughput: Vector3<f32>,
+}
 
 const MAX_BOUNCES: u32 = 32;
 const RR_WARMUP_BOUNCES: u32 = 3;
@@ -31,7 +37,7 @@ impl PathTracingIntegrator {
         rng: &mut impl Rng,
         eta_stack: &mut StaticStack<f32, 8>,
         ctx: &Context,
-    ) -> Vector3<f32> {
+    ) -> ShadeResult {
         let tex_coords = hit.intersection.tex_coord;
         let material = &scene.materials()[hit.material_index as usize];
         let mut cached_textures = CachedTextureLookups::new(&material, tex_coords);
@@ -132,7 +138,18 @@ impl PathTracingIntegrator {
             }
         }
 
-        // Indirect lighting: BSDF sampling for next bounce
+        let emissive = cached_textures.emissive();
+        let radiance = emissive + direct_light;
+
+        if remaining_depth <= 1 {
+            return ShadeResult {
+                radiance,
+                next_ray: None,
+                throughput: Vector3::zeros(),
+            };
+        }
+
+        // Indirect lighting: BSDF sampling for next bounce.
         let sample = material.sample_bsdf(
             ray.direction(),
             normal,
@@ -160,49 +177,40 @@ impl PathTracingIntegrator {
 
         const MIN_PDF: f32 = 1e-5;
 
-        let weighted_contribution = if sample.pdf > MIN_PDF && cos_theta > 0.0 {
-            let indirect_origin = hit_point + n * (0.001 * offset_sign);
-            let new_ray = Ray::new(indirect_origin, sample.direction);
-
-            // Compute survival probability for Russian roulette
-            // Use max component of (BSDF * cos_theta) as a proxy for path importance
-            let bsdf_weighted = sample
-                .bsdf_value
-                .component_mul(&Vector3::new(cos_theta, cos_theta, cos_theta));
-            let max_component = bsdf_weighted.x.max(bsdf_weighted.y).max(bsdf_weighted.z);
-            let survival_prob = if bounce_index < RR_WARMUP_BOUNCES {
-                1.0 // Continue with probability 1.0 for early bounces
-            } else {
-                max_component.min(1.0) // Clamp to [0,1]
+        if sample.pdf <= MIN_PDF || cos_theta <= 0.0 {
+            return ShadeResult {
+                radiance,
+                next_ray: None,
+                throughput: Vector3::zeros(),
             };
+        }
 
-            // Russian roulette termination
-            if rng.random::<f32>() > survival_prob {
-                Vector3::zeros() // Path terminated
-            } else {
-                let indirect_light = Self::trace(
-                    &new_ray,
-                    scene,
-                    remaining_depth - 1,
-                    bounce_index + 1,
-                    rng,
-                    eta_stack,
-                    ctx,
-                );
-                // Re-weight by survival probability to maintain unbiasedness
-                (indirect_light.component_mul(&sample.bsdf_value) * cos_theta)
-                    / (sample.pdf * survival_prob)
-            }
+        let indirect_origin = hit_point + n * (0.001 * offset_sign);
+        let next_ray = Ray::new(indirect_origin, sample.direction);
+
+        // Compute survival probability for Russian roulette.
+        // Use max component of (BSDF * cos_theta) as a proxy for path importance.
+        let bsdf_weighted = sample.bsdf_value * cos_theta;
+        let max_component = bsdf_weighted.x.max(bsdf_weighted.y).max(bsdf_weighted.z);
+        let survival_prob = if bounce_index < RR_WARMUP_BOUNCES {
+            1.0
         } else {
-            Vector3::zeros()
+            max_component.min(1.0)
         };
 
-        let emissive = cached_textures.emissive();
+        if survival_prob <= 0.0 || rng.random::<f32>() > survival_prob {
+            return ShadeResult {
+                radiance,
+                next_ray: None,
+                throughput: Vector3::zeros(),
+            };
+        }
 
-        // Combine: emissive + direct*albedo + indirect*albedo
-        // Direct light gets modulated by albedo here
-        // Indirect light gets modulated by albedo because it represents incoming radiance that needs to be reflected
-        emissive + direct_light + weighted_contribution
+        ShadeResult {
+            radiance,
+            next_ray: Some(next_ray),
+            throughput: sample.bsdf_value * (cos_theta / (sample.pdf * survival_prob)),
+        }
     }
 
     fn trace(
@@ -214,26 +222,50 @@ impl PathTracingIntegrator {
         eta_stack: &mut StaticStack<f32, 8>,
         ctx: &Context,
     ) -> Vector3<f32> {
-        // Safety cap: avoid pathological recursion (Russian roulette handles practical termination)
         if remaining_depth == 0 {
             return Vector3::zeros();
         }
 
-        scene
-            .intersect(ray, ctx)
-            .map(|hit| {
-                Self::shade(
-                    &hit,
-                    ray,
-                    scene,
-                    remaining_depth,
-                    bounce_index,
-                    rng,
-                    eta_stack,
-                    ctx,
-                )
-            })
-            .unwrap_or_else(|| scene.environment(&ray))
+        let mut ray = ray.clone();
+        let mut remaining_depth = remaining_depth;
+        let mut bounce_index = bounce_index;
+        let mut throughput = Vector3::new(1.0, 1.0, 1.0);
+        let mut radiance = Vector3::zeros();
+
+        while remaining_depth > 0 {
+            let Some(hit) = scene.intersect(&ray, ctx) else {
+                radiance += throughput.component_mul(&scene.environment(&ray));
+                break;
+            };
+
+            let shade = Self::shade(
+                &hit,
+                &ray,
+                scene,
+                remaining_depth,
+                bounce_index,
+                rng,
+                eta_stack,
+                ctx,
+            );
+
+            radiance += throughput.component_mul(&shade.radiance);
+
+            let Some(next_ray) = shade.next_ray else {
+                break;
+            };
+
+            throughput = throughput.component_mul(&shade.throughput);
+            if !math::is_greater_than_zero(throughput) {
+                break;
+            }
+
+            ray = next_ray;
+            remaining_depth -= 1;
+            bounce_index += 1;
+        }
+
+        radiance
     }
 }
 
