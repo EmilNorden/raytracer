@@ -2,7 +2,8 @@ use crate::acceleration::bounds::{AABBIntersection, AABB};
 use crate::content::mesh::MeshInstance;
 use crate::context::Context;
 use crate::core::Ray;
-use crate::scene::{Intersectable, Intersection};
+use crate::scene::{Intersectable, Intersection, Shadeable};
+use crate::scene::material::Material;
 use crate::static_stack::StaticStack;
 
 pub struct BVH {
@@ -16,6 +17,7 @@ struct BVHNode {
     right: u32,
     first: u32,
     count: u32,
+    has_transmissive_materials: bool,
 }
 
 impl BVHNode {
@@ -44,10 +46,15 @@ struct StackEntry {
     pub intersection: Option<AABBIntersection>,
 }
 
+struct BuildNodeResult {
+    node_index: usize,
+    has_transmissive_materials: bool,
+}
+
 impl BVH {
-    pub fn new(items: &mut [MeshInstance]) -> Self {
+    pub fn new(items: &mut [MeshInstance], materials: &[Material]) -> Self {
         let mut nodes = Vec::new();
-        Self::build_node(items, 0, &mut nodes);
+        Self::build_node(items, materials, 0, &mut nodes);
 
         Self {
             nodes,
@@ -56,6 +63,55 @@ impl BVH {
 
     pub fn intersect(&self, items: &[MeshInstance], ray: &Ray, ctx: &Context) -> Option<(u32, Intersection)> {
         self.intersect_with_limits(items, ray, 0.0, f32::INFINITY, ctx)
+    }
+
+    pub fn might_intersect_transparent_objects(&self, ray: &Ray, t_min: f32, t_max: f32, ctx: &Context) -> bool {
+
+        if !self.nodes[0].has_transmissive_materials {
+            return false;
+        }
+
+        let mut stack = StaticStack::<StackEntry, 64>::new_with_default(StackEntry {
+            node_index: 0,
+            intersection: None,
+        });
+
+
+        stack.push(StackEntry {
+            node_index: 0,
+            intersection: self.nodes[0].bbox.intersect_closest(ray, t_max),
+        });
+
+        while stack.has_items() {
+            let entry = stack.pop();
+            let node_idx = entry.node_index as usize;
+            let node = &self.nodes[node_idx];
+
+            if entry.intersection.is_some() {
+                if node.is_leaf() {
+                    return true;
+                } else {
+                    // 3. Traverse children (near first!)
+                    let left = node.left as usize;
+                    let right = node.right as usize;
+
+                    if self.nodes[left].has_transmissive_materials {
+                        stack.push(StackEntry {
+                            node_index: left as u32,
+                            intersection: self.nodes[left].bbox.intersect_closest(ray, t_max),
+                        });
+                    }
+                    if self.nodes[right].has_transmissive_materials {
+                        stack.push(StackEntry {
+                            node_index: right as u32,
+                            intersection: self.nodes[right].bbox.intersect_closest(ray, t_max),
+                        });
+                    }
+                }
+            }
+        }
+
+        false
     }
 
     pub fn intersect_with_limits(
@@ -166,7 +222,7 @@ impl BVH {
         hit
     }
 
-    fn build_node(items: &mut [MeshInstance], start: usize, nodes: &mut Vec<BVHNode>) -> usize {
+    fn build_node(items: &mut [MeshInstance], materials: &[Material], start: usize, nodes: &mut Vec<BVHNode>) -> BuildNodeResult {
         let node_index = nodes.len();
 
         nodes.push(BVHNode::default());
@@ -176,14 +232,22 @@ impl BVH {
         }));
 
         if items.len() < 3 {
+            let has_transmissive_materials = items.iter().any(|x| {
+                let material = &materials[x.material_index() as usize];
+                material.transmission_factor() > 0.0
+            });
             nodes[node_index] = BVHNode {
                 bbox: bounds,
                 left: 0,
                 right: 0,
                 first: start as u32,
                 count: items.len() as u32,
+                has_transmissive_materials,
             };
-            return node_index;
+            return BuildNodeResult {
+                node_index,
+                has_transmissive_materials,
+            };
         }
 
         if let Some(split) = Self::find_best_split(items) {
@@ -191,39 +255,67 @@ impl BVH {
 
             // Degenerate partition: keep node as leaf to avoid empty/unchanged recursion.
             if mid == 0 || mid == items.len() {
+
+                let has_transmissive_materials = items.iter().any(|x| {
+                    let material = &materials[x.material_index() as usize];
+                    material.transmission_factor() > 0.0
+                });
+
                 nodes[node_index] = BVHNode {
                     bbox: bounds,
                     left: 0,
                     right: 0,
                     first: start as u32,
                     count: items.len() as u32,
+                    has_transmissive_materials,
                 };
-                return node_index;
+
+                return BuildNodeResult {
+                    node_index,
+                    has_transmissive_materials,
+                };
             }
 
             let (left, right) = items.split_at_mut(mid);
 
-            let left_index = Self::build_node(left, start, nodes);
-            let right_index = Self::build_node(right, start + mid, nodes);
+            let left_result = Self::build_node(left, materials, start, nodes);
+            let right_result = Self::build_node(right, materials,start + mid, nodes);
 
+            let has_transmissive_materials = left_result.has_transmissive_materials || right_result.has_transmissive_materials;
             nodes[node_index] = BVHNode {
                 bbox: bounds,
-                left: left_index as u32,
-                right: right_index as u32,
+                left: left_result.node_index as u32,
+                right: right_result.node_index as u32,
                 first: 0,
                 count: 0,
+                has_transmissive_materials,
             };
+
+            BuildNodeResult {
+                node_index,
+                has_transmissive_materials,
+            }
         } else {
+
+            let has_transmissive_materials = items.iter().any(|x| {
+                let material = &materials[x.material_index() as usize];
+                material.transmission_factor() > 0.0
+            });
+
             nodes[node_index] = BVHNode {
                 bbox: bounds,
                 left: 0,
                 right: 0,
                 first: start as u32,
                 count: items.len() as u32,
+                has_transmissive_materials,
             };
-        }
 
-        node_index
+            BuildNodeResult {
+                node_index,
+                has_transmissive_materials,
+            }
+        }
     }
 
     fn goes_left(item: &MeshInstance, split: &Split) -> bool {
@@ -443,7 +535,11 @@ mod tests {
             make_mesh(Vector3::new(2.0, 0.0, 4.0)),
         ];
 
-        let bvh = BVH::new(&mut meshes);
+        let materials = vec![
+            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0),
+        ];
+
+        let bvh = BVH::new(&mut meshes, &materials);
 
         let rays = vec![
             Ray::new(Point3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0)),
@@ -475,7 +571,11 @@ mod tests {
             make_mesh(Vector3::new(0.0, 0.0, 5.0)),
         ];
 
-        let bvh = BVH::new(&mut meshes);
+        let materials = vec![
+            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0),
+        ];
+
+        let bvh = BVH::new(&mut meshes, &materials);
         let ray = Ray::new(Point3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0));
 
         let miss = bvh.intersect_with_limits(&meshes, &ray, 0.001, 4.5, &ctx);
@@ -495,7 +595,11 @@ mod tests {
             make_mesh(Vector3::new(0.0, 0.0, 10.0)),
         ];
 
-        let bvh = BVH::new(&mut meshes);
+        let materials = vec![
+            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0),
+        ];
+
+        let bvh = BVH::new(&mut meshes, &materials);
         let mut rng = StdRng::seed_from_u64(0xC0FFEE);
 
         let ctx = Context::new();

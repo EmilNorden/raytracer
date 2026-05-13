@@ -121,7 +121,7 @@ impl Scene {
             }
         }
 
-        let bvh = BVH::new(&mut meshes);
+        let bvh = BVH::new(&mut meshes, &materials);
 
 
         Self {
@@ -134,7 +134,7 @@ impl Scene {
     }
 
     pub fn rebuild_bvh(&mut self) {
-        self.bvh = BVH::new(&mut self.meshes);
+        self.bvh = BVH::new(&mut self.meshes, &self.materials);
     }
 
     pub fn active_camera(&self) -> &PerspectiveCamera {
@@ -264,6 +264,19 @@ impl Scene {
     }
 
     pub fn transmissions_along_path_2(&self, start: Point3<f32>, end: Point3<f32>, ctx: &Context) -> Vector3<f32> {
+        let direction = end - start;
+        let distance = direction.norm();
+
+        let ray = Ray::new(start, direction / distance);
+        let t_min = 0.001;
+        let t_max = (distance - 0.001).max(0.0);
+        if self.bvh.might_intersect_transparent_objects(&ray, t_min, t_max, ctx) {
+            return if self.is_visible(start, end, ctx) {
+                Vector3::repeat(1.0)
+            } else {
+                Vector3::zeros()
+            }
+        }
         let mut throughput = Vector3::new(1.0, 1.0, 1.0);
 
         for intersection in self.intersections_along_path(start, end, ctx) {
