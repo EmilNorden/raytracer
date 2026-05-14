@@ -87,20 +87,11 @@ impl Display for Scene {
 }
 
 impl Scene {
-    pub fn intersections_along_path<'a>(&'a self, start: Point3<f32>, end: Point3<f32>, ctx: &'a Context) -> PathIntersectionsIter<'a> {
-        let direction = end - start;
-        let distance = direction.norm();
+    pub fn intersections_along_path<'a>(&'a self, ray: Ray, distance: f32, ctx: &'a Context) -> PathIntersectionsIter<'a> {
 
-        let (ray, t_min, t_max, done) = if distance <= 1e-5 {
-            // Dummy ray; iterator is immediately exhausted when start/end are identical.
-            (Ray::new(start, Vector3::new(1.0, 0.0, 0.0)), 0.0, 0.0, true)
-        } else {
-            let ray = Ray::new(start, direction / distance);
-            let t_min = 0.001;
-            let t_max = (distance - 0.001).max(0.0);
-            let done = t_max <= t_min;
-            (ray, t_min, t_max, done)
-        };
+        let t_min = 0.001;
+        let t_max = (distance - 0.001).max(0.0);
+        let done = t_max <= t_min;
 
         PathIntersectionsIter {
             scene: self,
@@ -264,8 +255,14 @@ impl Scene {
     }
 
     pub fn transmissions_along_path_2(&self, start: Point3<f32>, end: Point3<f32>, ctx: &Context) -> Vector3<f32> {
+        let mut throughput = Vector3::new(1.0, 1.0, 1.0);
+
         let direction = end - start;
         let distance = direction.norm();
+
+        if distance <=  1e-5 {
+            return throughput;
+        }
 
         let ray = Ray::new(start, direction / distance);
         let t_min = 0.001;
@@ -277,13 +274,12 @@ impl Scene {
                 Vector3::zeros()
             }
         }
-        let mut throughput = Vector3::new(1.0, 1.0, 1.0);
 
-        for intersection in self.intersections_along_path(start, end, ctx) {
+        for intersection in self.intersections_along_path(ray, distance, ctx) {
             let mesh = &self.meshes[intersection.mesh_index as usize];
             let material = &self.materials[mesh.material_index() as usize];
-            let transmission = material.transmission_factor().clamp(0.0, 1.0);
-            if transmission <= 0.0 {
+            let transmission = material.transmission_factor();
+            if transmission <= 1e-5 {
                 return Vector3::zeros();
             }
 
