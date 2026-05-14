@@ -39,6 +39,12 @@ fn bench_render(c: &mut Criterion) {
             GltfLoader::load_scene(&options.scene_file, &options, &ctx).unwrap();
         let integrator = IntegratorImpl::Pathtracing(PathTracingIntegrator::new());
 
+        #[cfg(any(feature = "diagnostics", feature = "statistics"))]
+        {
+            eprintln!("Attempting to run benchmark with diagnostics/statistics features enabled. This will skew the results negatively. Aborting.");
+            return;
+        }
+
         group.bench_with_input(BenchmarkId::new("path_tracer", name), &options, |b, opts| {
             b.iter_batched(
                 || Frame::new(opts.resolution.width, opts.resolution.height),
