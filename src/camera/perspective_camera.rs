@@ -4,6 +4,7 @@ use rand::Rng;
 use crate::camera::viewpoint::Viewpoint;
 use crate::core::Ray;
 
+#[derive(Copy, Clone)]
 struct ViewPlane {
     base: Point3<f32>,
     size: Vector2<f32>,
@@ -41,17 +42,22 @@ impl ViewPlane {
         self.base - (self.u_dir * u * self.size.x) + (self.v_dir * v * self.size.y)
     }
 }
+
+#[derive(Copy, Clone)]
 pub struct PerspectiveCamera {
     origin: Point3<f32>,
     direction: Vector3<f32>,
     up: Vector3<f32>,
     yfov: f32,
     aspect_ratio: f32,
-    view_plane: ViewPlane
+    view_plane: ViewPlane,
+    focal_distance: f32,
+    aperture_size: f32,
+
 }
 
 impl PerspectiveCamera {
-    pub fn new(origin: Point3<f32>, direction: Vector3<f32>, up: Vector3<f32>, aspect_ratio: f32, yfov: f32) -> Self {
+    pub fn new(origin: Point3<f32>, direction: Vector3<f32>, up: Vector3<f32>, aspect_ratio: f32, yfov: f32, focal_distance: f32, aperture_size: f32) -> Self {
         Self {
             origin,
             direction,
@@ -59,6 +65,8 @@ impl PerspectiveCamera {
             yfov,
             aspect_ratio,
             view_plane: ViewPlane::new(origin, direction, up, yfov, aspect_ratio),
+            focal_distance,
+            aperture_size,
         }
     }
 
@@ -72,6 +80,10 @@ impl PerspectiveCamera {
         self.up = up;
         self.view_plane = ViewPlane::new(self.origin, self.direction, self.up, self.yfov, self.aspect_ratio);
     }
+
+    pub fn set_focal_distance(&mut self, focal_distance: f32) {
+        self.focal_distance = focal_distance;
+    }
 }
 
 impl Viewpoint for PerspectiveCamera {
@@ -80,12 +92,12 @@ impl Viewpoint for PerspectiveCamera {
         Ray::new(self.origin, direction.normalize())
     }
 
-    fn generate_offset_ray(&self, u: f32, v: f32, radius: f32, focal_distance: f32, rng: &mut impl Rng) -> Ray {
+    fn generate_offset_ray(&self, u: f32, v: f32, rng: &mut impl Rng) -> Ray {
         let direction = self.view_plane.get_coordinates_from_uv(u, v) - self.origin;
-        let focal_point = self.origin + direction.normalize() * focal_distance;
+        let focal_point = self.origin + direction.normalize() * self.focal_distance;
 
         let angle = rng.random::<f32>() * PI * 2.0;
-        let length = rng.random::<f32>() * radius;
+        let length = rng.random::<f32>() * self.aperture_size;
 
         let origin = self.origin + (self.view_plane.u_dir * angle.sin() * length) + (self.view_plane.v_dir * angle.cos() * length);
         let direction = (focal_point - origin).normalize();

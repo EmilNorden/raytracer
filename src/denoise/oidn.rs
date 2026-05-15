@@ -12,7 +12,7 @@ impl Oidn {
 
 #[cfg(feature = "open_image_denoise")]
 impl DenoiseFilter for Oidn {
-    fn denoise(&self, frame: &Frame, albedo: Option<Frame>, normal: Option<Frame>) -> Frame {
+    fn denoise(&self, frame: &Frame, albedo: &Option<Frame>, normal: &Option<Frame>) -> Frame {
         let mut new_frame = Frame::new(frame.width(), frame.height());
 
         fn slice_from_frame(frame: &Frame) -> &[f32] {

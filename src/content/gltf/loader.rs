@@ -5,7 +5,7 @@ use crate::content::gltf::material::create_material;
 use crate::content::mesh::{MeshData, MeshInstance};
 use crate::content::scene_loader::{SceneError, SceneLoader};
 use crate::content::triangle::Vertex;
-use crate::options::RenderOptions;
+use crate::options::{FocalDistance, RenderOptions};
 use crate::scene::light::{DirectionalLight, LightSource, PointLight};
 use crate::scene::material::Material;
 use crate::scene::node_graph::{NodeGraph, NodeTransform, SceneNode};
@@ -270,7 +270,12 @@ impl GltfLoader {
             let aspect_ratio = options.resolution.width as f32 / options.resolution.height as f32;
 
             camera_index = Some(cameras.len());
-            cameras.push(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov()))
+            let dof_settings = options.depth_of_field.unwrap_or_default();
+            let focal_distance = match dof_settings.focal_distance {
+                FocalDistance::Fixed(val) => val,
+                FocalDistance::Auto(_, _) => f32::MAX, // This will be set dynamically later
+            };
+            cameras.push(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov(), focal_distance, dof_settings.aperture_size))
         }
 
         let (translation, rotation, scale) = node.transform().decomposed();

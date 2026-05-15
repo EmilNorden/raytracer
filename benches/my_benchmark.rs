@@ -7,7 +7,7 @@ use raytracer::context::Context;
 use raytracer::frame::Frame;
 use raytracer::integrator::integrator::{Integrator, IntegratorImpl};
 use raytracer::integrator::pathtracing::PathTracingIntegrator;
-use raytracer::options::{DenoiseAlgorithm, RenderOptions};
+use raytracer::options::{DenoiseAlgorithm, DofSettings, RenderOptions};
 
 fn bench_render(c: &mut Criterion) {
     let mut group = c.benchmark_group("render");
@@ -29,10 +29,10 @@ fn bench_render(c: &mut Criterion) {
             samples,
             frame_rate: 0,
             denoise: DenoiseAlgorithm::None,
-            debug: false,
             max_bounces: 4,
             video: false,
             integrator: raytracer::options::Integrator::Pathtracing,
+            depth_of_field: None,
         };
 
         let ctx = Context::new();
@@ -51,7 +51,7 @@ fn bench_render(c: &mut Criterion) {
             b.iter_batched(
                 || Frame::new(opts.resolution.width, opts.resolution.height),
                 |mut frame| {
-                    integrator.integrate(&scene, &mut frame, opts.samples, &ctx);
+                    integrator.integrate(&scene, &mut frame, opts.samples, &opts, &ctx);
                 },
                 BatchSize::SmallInput,
             )

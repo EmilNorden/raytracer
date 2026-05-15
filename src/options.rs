@@ -35,6 +35,27 @@ impl Display for Resolution {
     }
 }
 
+#[derive(Copy, Clone, Debug, Deserialize)]
+pub enum FocalDistance {
+    Fixed(f32),
+    Auto(f32, f32)
+}
+
+#[derive(Copy, Clone, Debug, Deserialize)]
+pub struct DofSettings {
+    pub focal_distance: FocalDistance,
+    pub aperture_size: f32,
+}
+
+impl Default for DofSettings {
+    fn default() -> Self {
+        Self {
+            focal_distance: FocalDistance::Fixed(f32::MAX),
+            aperture_size: 0.0,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RenderOptions {
     pub scene_file: String,
@@ -46,6 +67,7 @@ pub struct RenderOptions {
     pub frame_rate: u32,
     pub denoise: DenoiseAlgorithm,
     pub integrator: Integrator,
+    pub depth_of_field: Option<DofSettings>,
 }
 
 #[derive(Debug, Deserialize)]

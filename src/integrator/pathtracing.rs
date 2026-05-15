@@ -12,6 +12,7 @@ use nalgebra::Vector3;
 use rand::Rng;
 use rayon::prelude::*;
 use crate::consts::ETA_STACK_SIZE;
+use crate::options::{FocalDistance, RenderOptions};
 
 pub struct PathTracingIntegrator {}
 
@@ -271,7 +272,7 @@ impl PathTracingIntegrator {
 }
 
 impl Integrator for PathTracingIntegrator {
-    fn integrate(&self, scene: &Scene, frame: &mut Frame, samples: u32, ctx: &Context) {
+    fn integrate(&self, scene: &Scene, frame: &mut Frame, samples: u32, options: &RenderOptions, ctx: &Context) {
         // TODO: Can this "threading boilerplate" be moved outside the integrator, so every dont have to do the same thing?
         let width = frame.width() as usize;
         let height = frame.height() as usize;
@@ -279,6 +280,20 @@ impl Integrator for PathTracingIntegrator {
         let height_inv = 1.0 / height as f32;
         let width_inv = 1.0 / width as f32;
         let samples_inv = 1.0 / samples as f32;
+
+        let mut camera = scene.active_camera().clone();
+        if let Some(dof) = &options.depth_of_field {
+            match dof.focal_distance {
+                FocalDistance::Fixed(val) => camera.set_focal_distance(val),
+                FocalDistance::Auto(u, v) => {
+                    let focus_ray = scene.active_camera().generate_ray(u, v);
+                    if let Some(focus_hit) = scene.intersect(&focus_ray, ctx) {
+                        camera.set_focal_distance(focus_hit.intersection.dist)
+                    }
+                }
+            }
+        }
+
 
         frame
             .pixels_mut()
@@ -290,8 +305,8 @@ impl Integrator for PathTracingIntegrator {
                 for x in 0..width {
                     let u = x as f32 * width_inv;
 
-                    let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
-                    //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
+                    //let ray = scene.active_camera().generate_ray(1.0 - u, 1.0 - v);
+                    let ray = camera.generate_offset_ray(1.0 - u, 1.0 - v, &mut rng);
 
                     // Assume initial eta = 1.000277 (Air) for all rays
                     let mut eta_stack = StaticStack::<f32, ETA_STACK_SIZE>::new_with_default(IOR_AIR);

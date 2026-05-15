@@ -1,11 +1,11 @@
 RenderOptions(
-    scene_file: "/Users/emilnorden/models/cars/direct.gltf",
+    scene_file: "/Users/emilnorden/models/ikea/direct.gltf",
     output_folder: "output",
     resolution: Resolution(
         width: 960,
         height: 540,
     ),
-    samples: 50,
+    samples: 100,
     max_bounces: 4,
     video: false,
     frame_rate: 60,
@@ -13,5 +13,9 @@ RenderOptions(
         auxiliary_albedo: true,
         auxiliary_normal: true,
     )),
-    integrator: Pathtracing
+    integrator: Pathtracing,
+    depth_of_field: Some(DofSettings(
+        aperture_size: 0.0125,
+        focal_distance: Auto(0.5, 0.5),
+    )),
 )

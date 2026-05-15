@@ -10,7 +10,7 @@ impl Passthrough {
 }
 
 impl DenoiseFilter for Passthrough {
-    fn denoise(&self, frame: &Frame, _albedo: Option<Frame>, _normal: Option<Frame>) -> Frame {
+    fn denoise(&self, frame: &Frame, _albedo: &Option<Frame>, _normal: &Option<Frame>) -> Frame {
         let mut new_frame = Frame::new(frame.width(), frame.height());
         new_frame.pixels_mut().copy_from_slice(frame.pixels());
 

@@ -55,7 +55,7 @@ impl RenderController {
                         break;
                     }
 
-                    integrator.integrate(&scene, &mut frame, options.samples, &ctx);
+                    integrator.integrate(&scene, &mut frame, options.samples, &options, &ctx);
 
                     let mut rgba = vec![0_u8; (frame.width() * frame.height() * 4) as usize];
                     frame.write_rgba(&mut rgba);
@@ -73,10 +73,24 @@ impl RenderController {
                             .join(format!("out{:04}.png", frame_index));
                         frame.save(path.clone());
 
-                        let denoised_path = std::path::Path::new(&options.output_folder)
+                        let denoise_result = denoiser.denoise(&frame, &scene, options.samples, &options, &ctx);
+
+                        let path = std::path::Path::new(&options.output_folder)
                             .join(format!("out{:04}_denoised.png", frame_index));
-                        let denoised_frame = denoiser.denoise(&frame, &scene, &ctx);
-                        denoised_frame.save(denoised_path);
+                        denoise_result.denoised_frame.save(path.clone());
+
+                        if let Some(auxiliary_albedo) = denoise_result.auxiliary_albedo {
+                            let path = std::path::Path::new(&options.output_folder)
+                                .join(format!("out{:04}_albedo.png", frame_index));
+                            auxiliary_albedo.save(path.clone());
+                        }
+
+                        if let Some(auxiliary_normal) = denoise_result.auxiliary_normal {
+                            let path = std::path::Path::new(&options.output_folder)
+                                .join(format!("out{:04}_normal.png", frame_index));
+                            auxiliary_normal.save(path.clone());
+                        }
+
 
                         frame.clear();
                         frame_index += 1;
