@@ -21,6 +21,7 @@ impl Frame {
         self.pixels.iter_mut().for_each(|p| *p = Vector3::default());
     }
 
+    pub fn pixels(&self) -> &[Vector3<f32>] { &self.pixels }
     pub fn pixels_mut(&mut self) -> &mut [Vector3<f32>] {
         &mut self.pixels
     }

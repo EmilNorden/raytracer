@@ -1904,6 +1904,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oidn"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12331c17ab2164afb05093c59e3eaf315466fe8551b7024327d579874b4ffb8f"
+dependencies = [
+ "num_enum",
+ "pkg-config",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2365,6 +2375,7 @@ dependencies = [
  "gltf",
  "image",
  "nalgebra",
+ "oidn",
  "pixels",
  "rand 0.9.1",
  "rayon",

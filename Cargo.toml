@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["statistics"]
+default = ["open_image_denoise"]
 diagnostics = []
 statistics = []
+open_image_denoise = ["oidn"]
 
 [dependencies]
 nalgebra = "0.33.2"
@@ -23,6 +24,7 @@ serde = { version = "1.0", features = ["derive"] }
 ffmpeg-cli = "0.1.0"
 tokio = { version = "1.52" , features = ["full"] }
 size = { version = "0.5.0" }
+oidn = { version = "2.3.3", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

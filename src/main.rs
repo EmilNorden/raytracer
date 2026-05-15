@@ -10,6 +10,7 @@ use winit::window::{Window, WindowId};
 use raytracer::content::gltf::loader::GltfLoader;
 use raytracer::content::scene_loader::SceneLoader;
 use raytracer::context::Context;
+use raytracer::denoise::create_denoiser;
 use raytracer::integrator::integrator::create;
 use raytracer::options::RenderOptions;
 use raytracer::render_controller::RenderController;
@@ -148,7 +149,6 @@ fn main() {
 
     let ctx = Context::new();
     let (scene, animation_controller) = GltfLoader::load_scene(&options.scene_file, &options, &ctx).unwrap();
-
     ctx.mem.print_summary();
 
     if scene.lights().is_empty() {
@@ -156,6 +156,7 @@ fn main() {
         return;
     }
 
+    let denoise_filter = create_denoiser(&options.denoise);
     let integrator = create(&options);
     let width = options.resolution.width;
     let height = options.resolution.height;
@@ -165,7 +166,7 @@ fn main() {
 
     println!("Rendering using {} thread(s)", rayon::current_num_threads());
 
-    let render_controller = RenderController::start(options, scene, animation_controller, integrator, ctx);
+    let render_controller = RenderController::start(options, scene, animation_controller, integrator, denoise_filter, ctx);
 
     let mut app = App {
         width,

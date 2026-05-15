@@ -1,13 +1,17 @@
 RenderOptions(
-    scene_file: "/Users/emilnorden/models/trans/direct.gltf",
+    scene_file: "/Users/emilnorden/models/cars/direct.gltf",
     output_folder: "output",
     resolution: Resolution(
-        width: 1024,
-        height: 768,
+        width: 960,
+        height: 540,
     ),
-    samples: 10,
-    debug: false,
+    samples: 50,
     max_bounces: 4,
     video: false,
     frame_rate: 60,
+    denoise: OpenImageDenoise(DenoiseSettings(
+        auxiliary_albedo: true,
+        auxiliary_normal: true,
+    )),
+    integrator: Pathtracing
 )

@@ -6,6 +6,7 @@ use crate::math::lerp;
 use crate::scene::coordinate_system::CoordinateSystem;
 use crate::scene::texture::{Texture};
 use crate::static_stack::StaticStack;
+use crate::consts::ETA_STACK_SIZE;
 
 pub const IOR_AIR: f32 = 1.000277;
 
@@ -38,6 +39,7 @@ pub struct Material {
     // Transmission/refraction properties
     transmission_factor: f32,  // 0.0 = opaque, 1.0 = fully transparent
     ior: f32,                  // Index of refraction (1.5 for glass, 1.33 for water)
+    invert_albedo: bool,
 }
 
 pub struct CachedTextureLookups<'a> {
@@ -84,7 +86,7 @@ pub struct BsdfSample {
 }
 
 impl Material {
-    pub fn new(color: Vector3<f32>, texture: Option<Texture>, normal_map: Option<Texture>, emissive_texture: Option<Texture>, metallic_roughness_texture: Option<Texture>, normal_scale: f32, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32) -> Self {
+    pub fn new(color: Vector3<f32>, texture: Option<Texture>, normal_map: Option<Texture>, emissive_texture: Option<Texture>, metallic_roughness_texture: Option<Texture>, normal_scale: f32, emissive: Vector3<f32>, roughness: f32, metallic: f32, transmission_factor: f32, ior: f32, invert_albedo: bool) -> Self {
         Self {
             color,
             texture,
@@ -97,6 +99,7 @@ impl Material {
             metallic,
             transmission_factor,
             ior,
+            invert_albedo
         }
     }
 
@@ -145,7 +148,13 @@ impl Material {
     }
 
     pub fn sample_color(&self, u: f32, v: f32) -> Vector3<f32> {
-        self.texture.as_ref().map(|t| t.sample_color(u, v)).unwrap_or(self.color)
+        let albedo = self.texture.as_ref().map(|t| t.sample_color(u, v)).unwrap_or(self.color);
+        if self.invert_albedo {
+            Vector3::repeat(1.0) - albedo
+        }
+        else {
+            albedo
+        }
     }
 
     pub fn sample_emissive(&self, _u: f32, _v: f32) -> Vector3<f32> {
@@ -245,7 +254,7 @@ impl Material {
     /// Note: `bsdf_value` here is the contribution of the sampled lobe, not a
     /// full evaluation of all lobes. That is intentional because `pdf` is also
     /// branch-conditioned (e.g. `specular_prob * pdf_spec`).
-    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, cached_textures: &mut CachedTextureLookups, rng: &mut impl Rng, eta_stack: &mut StaticStack<f32, 8>, ctx: &Context) -> BsdfSample {
+    pub fn sample_bsdf(&self, incoming: Vector3<f32>, normal: Vector3<f32>, albedo: Vector3<f32>, cached_textures: &mut CachedTextureLookups, rng: &mut impl Rng, eta_stack: &mut StaticStack<f32, ETA_STACK_SIZE>, ctx: &Context) -> BsdfSample {
         let n = normal;
         let v = (-incoming).normalize();
         let n_dot_v = n.dot(&v);
@@ -601,6 +610,7 @@ mod tests {
             0.0,
             0.0,
             1.5,
+            false,
         )
     }
 
@@ -655,6 +665,7 @@ mod tests {
             0.0,
             1.0,
             1.5,
+            false,
         );
         let mut cache = CachedTextureLookups::new(&material, Vector2::new(0.5, 0.5));
         let normal = Vector3::new(0.0, 0.0, 1.0);

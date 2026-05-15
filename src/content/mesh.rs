@@ -301,7 +301,7 @@ mod tests {
             },
         ];
 
-        let material = Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.5);
+        let material = Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.5, false);
         let mesh = MeshInstance::new(
             Arc::new(MeshData::new(triangle.to_vec(), vec![[0, 1, 2]], 0)),
             Matrix4::identity(),

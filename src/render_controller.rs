@@ -1,4 +1,6 @@
 use crate::animation::controller::{AnimationController, AnimationState};
+use crate::context::Context;
+use crate::denoise::{DenoiseFilter, Denoiser};
 use crate::frame::Frame;
 use crate::integrator::integrator::{Integrator, IntegratorImpl};
 use crate::options::RenderOptions;
@@ -8,7 +10,6 @@ use std::process::Command;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use crate::context::Context;
 
 pub struct RenderUpdate {
     pub sample: u32,
@@ -34,6 +35,7 @@ impl RenderController {
         mut scene: Scene,
         mut animation_controller: AnimationController,
         integrator: IntegratorImpl,
+        denoiser: Denoiser,
         ctx: Context,
     ) -> Self {
         let (update_tx, update_rx) = mpsc::channel();
@@ -60,9 +62,22 @@ impl RenderController {
 
                     let is_done = sample == options.samples;
                     let output_path = if is_done {
+                        let folder = std::path::Path::new(&options.output_folder);
+                        println!("Writing to output folder {:?}", folder);
+                        if !folder.exists() {
+                            std::fs::create_dir_all(folder)
+                                .expect("failed to create output folder");
+                        }
+
                         let path = std::path::Path::new(&options.output_folder)
                             .join(format!("out{:04}.png", frame_index));
                         frame.save(path.clone());
+
+                        let denoised_path = std::path::Path::new(&options.output_folder)
+                            .join(format!("out{:04}_denoised.png", frame_index));
+                        let denoised_frame = denoiser.denoise(&frame, &scene, &ctx);
+                        denoised_frame.save(denoised_path);
+
                         frame.clear();
                         frame_index += 1;
 

@@ -1,2 +1,3 @@
 [env]
 # RAYON_NUM_THREADS = "1"
+OIDN_DIR="/opt/homebrew/opt/open-image-denoise"

@@ -11,6 +11,7 @@ use crate::static_stack::StaticStack;
 use nalgebra::Vector3;
 use rand::Rng;
 use rayon::prelude::*;
+use crate::consts::ETA_STACK_SIZE;
 
 pub struct PathTracingIntegrator {}
 
@@ -35,7 +36,7 @@ impl PathTracingIntegrator {
         remaining_depth: u32,
         bounce_index: u32,
         rng: &mut impl Rng,
-        eta_stack: &mut StaticStack<f32, 8>,
+        eta_stack: &mut StaticStack<f32, ETA_STACK_SIZE>,
         ctx: &Context,
     ) -> ShadeResult {
         let tex_coords = hit.intersection.tex_coord;
@@ -219,7 +220,7 @@ impl PathTracingIntegrator {
         remaining_depth: u32,
         bounce_index: u32,
         rng: &mut impl Rng,
-        eta_stack: &mut StaticStack<f32, 8>,
+        eta_stack: &mut StaticStack<f32, ETA_STACK_SIZE>,
         ctx: &Context,
     ) -> Vector3<f32> {
         if remaining_depth == 0 {
@@ -293,7 +294,7 @@ impl Integrator for PathTracingIntegrator {
                     //let ray = scene.camera.generate_offset_ray(1.0 - u, 1.0 - v, 0.4, 16.0, &mut rng);
 
                     // Assume initial eta = 1.000277 (Air) for all rays
-                    let mut eta_stack = StaticStack::<f32, 8>::new_with_default(IOR_AIR);
+                    let mut eta_stack = StaticStack::<f32, ETA_STACK_SIZE>::new_with_default(IOR_AIR);
 
                     let result =
                         Self::trace(&ray, scene, MAX_BOUNCES, 0, &mut rng, &mut eta_stack, ctx);

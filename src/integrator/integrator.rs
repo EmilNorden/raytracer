@@ -1,6 +1,7 @@
 use crate::context::Context;
 use crate::frame::Frame;
-use crate::integrator::debug::DebugIntegrator;
+use crate::integrator::albedo::AlbedoIntegrator;
+use crate::integrator::normal::NormalIntegrator;
 use crate::integrator::pathtracing::PathTracingIntegrator;
 use crate::options::RenderOptions;
 use crate::scene::scene::Scene;
@@ -10,17 +11,21 @@ pub trait Integrator {
 }
 
 pub enum IntegratorImpl {
-    Debug(DebugIntegrator),
+    Normal(NormalIntegrator),
     Pathtracing(PathTracingIntegrator),
+    Albedo(AlbedoIntegrator),
 }
 
 impl Integrator for IntegratorImpl {
     fn integrate(&self, scene: &Scene, frame: &mut Frame, samples: u32, ctx: &Context) {
         match self {
-            IntegratorImpl::Debug(i) => {
+            IntegratorImpl::Normal(i) => {
                 i.integrate(scene, frame, samples, ctx);
             }
             IntegratorImpl::Pathtracing(i) => {
+                i.integrate(scene, frame, samples, ctx);
+            },
+            IntegratorImpl::Albedo(i) => {
                 i.integrate(scene, frame, samples, ctx);
             }
         }
@@ -28,10 +33,9 @@ impl Integrator for IntegratorImpl {
 }
 
 pub fn create(options: &RenderOptions) -> IntegratorImpl {
-    if options.debug {
-        IntegratorImpl::Debug(DebugIntegrator::new())
-    }
-    else {
-        IntegratorImpl::Pathtracing(PathTracingIntegrator::new())
+    match options.integrator {
+        crate::options::Integrator::Pathtracing => IntegratorImpl::Pathtracing(PathTracingIntegrator::new()),
+        crate::options::Integrator::Albedo => IntegratorImpl::Albedo(AlbedoIntegrator {}),
+        crate::options::Integrator::Debug => IntegratorImpl::Normal(NormalIntegrator {}),
     }
 }

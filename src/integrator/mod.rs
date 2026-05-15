@@ -1,4 +1,5 @@
 pub mod integrator;
 pub mod pathtracing;
-pub mod debug;
+pub mod normal;
 pub mod bdpt;
+pub mod albedo;

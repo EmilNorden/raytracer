@@ -6,7 +6,24 @@ use gltf::texture;
 use nalgebra::Vector3;
 use std::path::Path;
 use gltf::texture::WrappingMode;
+use serde::Deserialize;
 use crate::context::Context;
+
+#[derive(Deserialize)]
+struct MaterialExtras {
+    invert: Option<bool>,
+}
+
+fn extract_invert_albedo_flag(material: &gltf::material::Material) -> bool {
+    material
+        .extras()
+        .as_ref()
+        .and_then(|extras| {
+            gltf::json::deserialize::from_str::<MaterialExtras>(extras.get()).ok()
+        })
+        .and_then(|extras| extras.invert)
+        .unwrap_or(false)
+}
 
 fn create_texture_internal(texture: &texture::Texture, folder: &Path, ctx: &Context) -> Texture {
     let source = texture.source();
@@ -56,6 +73,7 @@ pub fn create_material(material: &gltf::Material, folder: &Path, ctx: &Context) 
     let roughness = material.pbr_metallic_roughness().roughness_factor();
     let metallic = material.pbr_metallic_roughness().metallic_factor();
 
+    let invert_albedo = extract_invert_albedo_flag(material);
 
     let transmission_factor = material
         .transmission()
@@ -65,5 +83,5 @@ pub fn create_material(material: &gltf::Material, folder: &Path, ctx: &Context) 
     const EMISSIVE_SCALE: f32 = 1.0; // TODO: This is a hack to make emissive materials more visible. Should probably be exposed as a parameter.
     let emissive_strength = material.emissive_strength().unwrap_or(0.0) * EMISSIVE_SCALE;
     let emissive = Vector3::new(material.emissive_factor()[0] * emissive_strength, material.emissive_factor()[1] * emissive_strength, material.emissive_factor()[2] * emissive_strength);
-    Ok(Material::new(Vector3::new(base_color[0], base_color[1], base_color[2]), albedo_texture, normal_map, emissive_texture, metallic_roughness_texture, normal_scale, emissive, roughness, metallic, transmission_factor, ior))
+    Ok(Material::new(Vector3::new(base_color[0], base_color[1], base_color[2]), albedo_texture, normal_map, emissive_texture, metallic_roughness_texture, normal_scale, emissive, roughness, metallic, transmission_factor, ior, invert_albedo))
 }

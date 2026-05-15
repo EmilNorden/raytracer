@@ -536,7 +536,7 @@ mod tests {
         ];
 
         let materials = vec![
-            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0),
+            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0, false),
         ];
 
         let bvh = BVH::new(&mut meshes, &materials);
@@ -572,7 +572,7 @@ mod tests {
         ];
 
         let materials = vec![
-            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0),
+            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0, false),
         ];
 
         let bvh = BVH::new(&mut meshes, &materials);
@@ -596,7 +596,7 @@ mod tests {
         ];
 
         let materials = vec![
-            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0),
+            Material::new(Vector3::zeros(), None, None, None, None, 1.0, Vector3::zeros(), 0.0, 0.0, 0.0, 1.0, false),
         ];
 
         let bvh = BVH::new(&mut meshes, &materials);

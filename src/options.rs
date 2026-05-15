@@ -41,10 +41,49 @@ pub struct RenderOptions {
     pub output_folder: String,
     pub resolution: Resolution,
     pub samples: u32,
-    pub debug: bool,
     pub max_bounces: u32,
     pub video: bool,
     pub frame_rate: u32,
+    pub denoise: DenoiseAlgorithm,
+    pub integrator: Integrator,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum Integrator {
+    Pathtracing,
+    Albedo,
+    Debug
+}
+
+impl Display for Integrator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Integrator::Pathtracing => write!(f, "Pathtracing"),
+            Integrator::Albedo => write!(f, "Albedo"),
+            Integrator::Debug => write!(f, "Debug"),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Deserialize, Default)]
+pub struct DenoiseSettings {
+    pub auxiliary_albedo: bool,
+    pub auxiliary_normal: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum DenoiseAlgorithm {
+    OpenImageDenoise(DenoiseSettings),
+    None,
+}
+
+impl Display for DenoiseAlgorithm {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DenoiseAlgorithm::OpenImageDenoise(_) => write!(f, "OpenImageDenoise"),
+            DenoiseAlgorithm::None => write!(f, "None"),
+        }
+    }
 }
 
 impl Display for RenderOptions {
@@ -54,9 +93,10 @@ impl Display for RenderOptions {
         writeln!(f, "  output_folder: {}", self.output_folder)?;
         writeln!(f, "  resolution: {}", self.resolution)?;
         writeln!(f, "  samples: {}", self.samples)?;
-        writeln!(f, "  debug: {}", self.debug)?;
         writeln!(f, "  max_bounces: {}", self.max_bounces)?;
         writeln!(f, "  video: {}", self.video)?;
-        write!(f, "  frame_rate: {}", self.frame_rate)
+        writeln!(f, "  frame_rate: {}", self.frame_rate)?;
+        writeln!(f, "  denoise: {}", self.denoise)?;
+        write!(f, "  integrator: {}", self.integrator)
     }
 }
