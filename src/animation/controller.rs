@@ -12,12 +12,11 @@ pub enum AnimationState {
 pub struct AnimationController {
     time: f32,
     last_timestamp: f32,
-    node_graph: NodeGraph,
     animations: Vec<Animation>,
 }
 
 impl AnimationController {
-    pub fn new(node_graph: NodeGraph, animations: Vec<Animation>) -> Self {
+    pub fn new(animations: Vec<Animation>) -> Self {
         let mut last_timestamp = 0.0;
         for animation in &animations {
             for channel in &animation.channels {
@@ -28,7 +27,6 @@ impl AnimationController {
         Self {
             time: 0.0,
             last_timestamp,
-            node_graph,
             animations,
         }
     }
@@ -47,12 +45,12 @@ impl AnimationController {
         None
     }
 
-    pub fn step(&mut self, delta_time: f32, scene: &mut Scene) -> AnimationState {
+    pub fn step(&mut self, delta_time: f32, node_graph: &mut NodeGraph, scene: &mut Scene) -> AnimationState {
         self.time += delta_time;
 
         for animation in &self.animations {
             for channel in &animation.channels {
-                let node = Self::get_node(&mut self.node_graph.roots, channel.node_index).unwrap();
+                let node = Self::get_node(&mut node_graph.roots, channel.node_index).unwrap();
                 match channel.interpolation {
                     Interpolation::Linear => {
                         let to_index = channel.timestamps
@@ -134,7 +132,7 @@ impl AnimationController {
             }
         }
 
-        Self::update_scene(self.node_graph.roots.as_mut_slice(), &nalgebra::Matrix4::identity(), scene);
+        Self::update_scene(node_graph.roots.as_mut_slice(), &nalgebra::Matrix4::identity(), scene);
         scene.rebuild_bvh();
 
         if self.time >= self.last_timestamp {

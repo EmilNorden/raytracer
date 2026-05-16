@@ -148,7 +148,7 @@ fn main() {
     println!("Using the following options:\n{}", options);
 
     let ctx = Context::new();
-    let (scene, animation_controller) = GltfLoader::load_scene(&options.scene_file, &options, &ctx).unwrap();
+    let (scene, node_graph, animation_controller) = GltfLoader::load_scene(&options.scene_file, &options, &ctx).unwrap();
     ctx.mem.print_summary();
 
     if scene.lights().is_empty() {
@@ -166,7 +166,7 @@ fn main() {
 
     println!("Rendering using {} thread(s)", rayon::current_num_threads());
 
-    let render_controller = RenderController::start(options, scene, animation_controller, integrator, denoise_filter, ctx);
+    let render_controller = RenderController::start(options, scene, node_graph, animation_controller, integrator, denoise_filter, ctx);
 
     let mut app = App {
         width,

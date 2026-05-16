@@ -270,17 +270,14 @@ impl GltfLoader {
             let aspect_ratio = options.resolution.width as f32 / options.resolution.height as f32;
 
             camera_index = Some(cameras.len());
-            let dof_settings = options.depth_of_field.unwrap_or_default();
-            let focal_distance = match dof_settings.focal_distance {
-                FocalDistance::Fixed(val) => val,
-                FocalDistance::Auto(_, _) => f32::MAX, // This will be set dynamically later
-            };
-            cameras.push(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov(), focal_distance, dof_settings.aperture_size))
+            let dof_settings = options.depth_of_field.clone().unwrap_or_default();
+            cameras.push(PerspectiveCamera::new(origin, forward, up, aspect_ratio, perspective.yfov(), 1.0, dof_settings.aperture_size))
         }
 
         let (translation, rotation, scale) = node.transform().decomposed();
 
         Ok(SceneNode {
+            name: node.name().map(|s| s.to_string()),
             index: node.index(),
             local_transform: NodeTransform::new(
                 Vector3::new(translation[0], translation[1], translation[2]),
@@ -361,7 +358,7 @@ impl GltfLoader {
     }
 }
 impl SceneLoader for GltfLoader {
-    fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions, ctx: &Context) -> anyhow::Result<(Scene, AnimationController)> {
+    fn load_scene<P: AsRef<Path>>(path: P, options: &RenderOptions, ctx: &Context) -> anyhow::Result<(Scene, NodeGraph, AnimationController)> {
         let path = path.as_ref();
         let parent_folder = path.parent().unwrap();
 
@@ -382,7 +379,7 @@ impl SceneLoader for GltfLoader {
             let scene = Scene::new(cameras, meshes, materials, lights);
             println!("Loaded scene {}", scene);
 
-            Ok((scene, AnimationController::new(node_graph, animations)))
+            Ok((scene, node_graph, AnimationController::new(animations)))
         }
         else { Err(SceneError::NoDefaultScene.into()) }
     }

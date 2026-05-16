@@ -10,7 +10,10 @@ use std::process::Command;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+use nalgebra::Point3;
+use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::camera::viewpoint::Viewpoint;
+use crate::scene::node_graph::{NodeGraph, SceneNode};
 
 pub struct RenderUpdate {
     pub sample: u32,
@@ -34,6 +37,7 @@ impl RenderController {
     pub fn start(
         options: RenderOptions,
         mut scene: Scene,
+        mut node_graph: NodeGraph,
         mut animation_controller: AnimationController,
         integrator: IntegratorImpl,
         denoiser: Denoiser,
@@ -52,17 +56,7 @@ impl RenderController {
 
             let mut camera = scene.active_camera().clone();
 
-            if let Some(dof) = &options.depth_of_field {
-                match dof.focal_distance {
-                    FocalDistance::Fixed(val) => camera.set_focal_distance(val),
-                    FocalDistance::Auto(u, v) => {
-                        let focus_ray = scene.active_camera().generate_ray(u, v);
-                        if let Some(focus_hit) = scene.intersect(&focus_ray, &ctx) {
-                            camera.set_focal_distance(focus_hit.intersection.dist)
-                        }
-                    }
-                }
-            }
+            Self::update_depth_of_field(&options, &mut scene, &mut node_graph, &ctx, &mut camera);
 
             loop {
                 for sample in 1..=options.samples {
@@ -150,7 +144,7 @@ impl RenderController {
                     break;
                 }
 
-                if animation_controller.step(frame_duration, &mut scene) == AnimationState::Finished {
+                if animation_controller.step(frame_duration, &mut node_graph, &mut scene) == AnimationState::Finished {
                     stop_video = true;
                 }
             }
@@ -160,6 +154,33 @@ impl RenderController {
             update_rx,
             command_tx,
             worker: Some(worker),
+        }
+    }
+
+    fn update_depth_of_field(options: &RenderOptions, mut scene: &mut Scene, mut node_graph: &mut NodeGraph, ctx: &Context, camera: &mut PerspectiveCamera) {
+        if let Some(dof) = &options.depth_of_field {
+            let focal_distance = match dof.focal_distance.clone() {
+                FocalDistance::Fixed(val) => Some(val),
+                FocalDistance::Auto(u, v) => {
+                    let focus_ray = scene.active_camera().generate_ray(u, v);
+                    scene.intersect(&focus_ray, &ctx).map(|hit| hit.intersection.dist)
+                },
+                FocalDistance::Object(name) => {
+                    match node_graph.get_node_by_name(&name) {
+                        None => {
+                            eprintln!("Warning: could not find object '{}' for focal distance", name);
+                            None
+                        },
+                        Some(node) => {
+                            Some((Point3::from(node.local_transform.translation) - camera.origin()).norm())
+                        }
+                    }
+                }
+            };
+
+            if let Some(focal_distance) = focal_distance {
+                camera.set_focal_distance(focal_distance);
+            }
         }
     }
 

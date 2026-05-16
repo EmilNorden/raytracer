@@ -1,5 +1,5 @@
 RenderOptions(
-    scene_file: "/Users/emilnorden/models/empty_room/direct.gltf",
+    scene_file: "/Users/emilnorden/models/cars2/cars2.gltf",
     output_folder: "output",
     resolution: Resolution(
         width: 960,
@@ -14,8 +14,9 @@ RenderOptions(
         auxiliary_normal: true,
     )),
     integrator: Pathtracing,
-    depth_of_field: Some(DofSettings(
-        aperture_size: 0.01,
-        focal_distance: Fixed(1.0),
-    )),
+    depth_of_field: None,
+    /*Some(DofSettings(
+        aperture_size: 0.1,
+        focal_distance: Object("Stuffed Toy Penguin"),
+    ))*/
 )

@@ -35,13 +35,14 @@ impl Display for Resolution {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub enum FocalDistance {
     Fixed(f32),
-    Auto(f32, f32)
+    Auto(f32, f32),
+    Object(String),
 }
 
-#[derive(Copy, Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct DofSettings {
     pub focal_distance: FocalDistance,
     pub aperture_size: f32,

@@ -70,6 +70,10 @@ impl PerspectiveCamera {
         }
     }
 
+    pub fn origin(&self) -> Point3<f32> {
+        self.origin
+    }
+
     pub fn update_transform(&mut self, transform: Matrix4<f32>) {
         let position = transform.transform_point(&Point3::origin());
         let forward = transform.transform_vector(&Vector3::new(0.0, 0.0, -1.0)).normalize();

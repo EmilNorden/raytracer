@@ -35,6 +35,8 @@ impl Default for NodeTransform {
 /// A single node in the scene graph, mirroring the GLTF node hierarchy.
 #[derive(Debug, Clone)]
 pub struct SceneNode {
+    /// Node name
+    pub name: Option<String>,
     /// GLTF node index (stable across the lifetime of the document).
     pub index: usize,
     /// Local TRS transform relative to the parent.
@@ -64,6 +66,14 @@ impl NodeGraph {
     /// Iterate every node in depth-first order.
     pub fn iter(&self) -> impl Iterator<Item = &SceneNode> {
         NodeIter { stack: self.roots.iter().collect() }
+    }
+    pub fn get_node_by_name(&self, name: &str) -> Option<&SceneNode> {
+        for node in self.iter() {
+            if node.name == Some(name.to_string()) {
+                return Some(node);
+            }
+        }
+        None
     }
 }
 
