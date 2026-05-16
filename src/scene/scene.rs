@@ -349,10 +349,6 @@ impl Scene {
         throughput
     }
 
-    fn transmission_along_path_inner(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> Option<f32> {
-        unimplemented!()
-    }
-
     /// Check if there's an unoccluded path between two points
     pub fn is_visible(&self, p1: Point3<f32>, p2: Point3<f32>, ctx: &Context) -> bool {
         let direction = p2 - p1;

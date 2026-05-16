@@ -1,5 +1,6 @@
 use std::sync::atomic::AtomicU64;
 
+#[allow(dead_code)]
 pub struct Diagnostics {
     eta_underflows: AtomicU64,
     exit_without_enter: AtomicU64,

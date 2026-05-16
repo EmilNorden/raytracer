@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicU64;
 
 
+#[allow(dead_code)]
 pub struct Statistics {
     ray_triangle_tests: AtomicU64,
     ray_triangle_hits: AtomicU64,

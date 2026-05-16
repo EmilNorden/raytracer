@@ -162,20 +162,6 @@ impl Material {
         //self.emissive_texture.as_ref().map(|t| {t.sample_color(u, v).component_mul(&self.emissive)}).unwrap_or(self.emissive)
     }
 
-    fn build_orthonormal_basis(normal: &Vector3<f32>) -> (Vector3<f32>, Vector3<f32>) {
-        // Choose arbitrary vector not parallel to normal
-        let up = if normal.abs().x < 0.9 {
-            Vector3::new(1.0, 0.0, 0.0)
-        } else {
-            Vector3::new(0.0, 1.0, 0.0)
-        };
-
-        let tangent = up.cross(normal).normalize();
-        let bitangent = normal.cross(&tangent);
-
-        (tangent, bitangent)
-    }
-
     /*fn cosine_sample_hemisphere(normal: &Vector3<f32>, rng: &mut impl Rng) -> (Vector3<f32>, f32) {
         // Generate two uniform random numbers
         let u1: f32 = rng.random();
@@ -570,11 +556,6 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         let basis = CoordinateSystem::from_normal(normal);
         (basis.u * h_local.x + basis.v * h_local.y + basis.w * h_local.z).normalize()
     }
-
-    fn fresnel_schlick(&self, l_dot_h: f32, f0: Vector3<f32>) -> Vector3<f32> {
-        Self::schlick_fresnel(l_dot_h, f0)
-    }
-
 
 
 
