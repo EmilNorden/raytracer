@@ -64,25 +64,43 @@ impl PathTracingIntegrator {
 
                     if distance_sq > 1e-12 {
                         let light_dir = to_light.normalize();
-                        let cos_theta = normal.dot(&light_dir).max(0.0);
 
-                        if cos_theta > 0.0 {
+                        let n_dot_l = normal.dot(&light_dir);
+
+                        if n_dot_l > 0.0 || (n_dot_l < 0.0 && material.transmission_factor() > 0.0)  {
                             let transmission =
                                 scene.transmissions_along_path_2(surface_point, light_point, ctx);
                             if math::is_greater_than_zero(transmission) {
+
                                 let view_dir = -ray.direction();
-                                let brdf = material.evaluate_bsdf(
-                                    &light_dir,
-                                    &view_dir,
-                                    &normal,
-                                    &albedo,
-                                    &mut cached_textures,
-                                );
+                                let contribution = if n_dot_l > 0.0 {
+
+                                    material.evaluate_bsdf(
+                                        &light_dir,
+                                        &view_dir,
+                                        &normal,
+                                        &albedo,
+                                        &mut cached_textures,
+                                    )
+                                } else {
+                                    let eta_i = eta_stack.peek();
+                                    let eta_t = material.ior();
+                                    material.evaluate_btdf(
+                                        &light_dir,
+                                        &view_dir,
+                                        &normal,
+                                        &albedo,
+                                        &mut cached_textures,
+                                        eta_i,
+                                        eta_t
+                                    )
+                                };
+
 
                                 direct_light = (light_sample.radiance / distance_sq)
-                                    .component_mul(&brdf)
+                                    .component_mul(&contribution)
                                     .component_mul(&transmission)
-                                    * cos_theta;
+                                    * n_dot_l.abs();
                             }
                         }
                     }

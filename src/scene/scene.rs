@@ -267,7 +267,7 @@ impl Scene {
         let ray = Ray::new(start, direction / distance);
         let t_min = 0.001;
         let t_max = (distance - 0.001).max(0.0);
-        if self.bvh.might_intersect_transparent_objects(&ray, t_min, t_max, ctx) {
+        if !self.bvh.might_intersect_transparent_objects(&ray, t_min, t_max, ctx) {
             return if self.is_visible(start, end, ctx) {
                 Vector3::repeat(1.0)
             } else {

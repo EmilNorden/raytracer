@@ -1,5 +1,5 @@
 RenderOptions(
-    scene_file: "/Users/emilnorden/models/ikea/direct.gltf",
+    scene_file: "/Users/emilnorden/models/empty_room/direct.gltf",
     output_folder: "output",
     resolution: Resolution(
         width: 960,

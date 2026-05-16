@@ -443,10 +443,11 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         )
     }
 
-    /// Evaluate the reflective BSDF for a specific pair of directions.
+    /// Evaluate the **reflective** lobe (BRDF) for a specific pair of directions.
     ///
-    /// This is what you want when the outgoing direction is already known,
-    /// for example during next-event estimation / direct light sampling.
+    /// Both `light_dir` and `view_dir` must be in the same hemisphere as `normal`
+    /// (`n·l > 0` and `n·v > 0`). Use [`evaluate_btdf`] when light arrives from the
+    /// opposite side of a transmissive surface.
     pub fn evaluate_bsdf(&self, light_dir: &Vector3<f32>, view_dir: &Vector3<f32>, normal: &Vector3<f32>, albedo: &Vector3<f32>, cached_textures: &mut CachedTextureLookups) -> Vector3<f32> {
         let n_dot_l = normal.dot(&light_dir).max(0.0);
         let n_dot_v = normal.dot(&view_dir).max(0.0);
@@ -470,6 +471,74 @@ pub fn sample_lambertian_bsdf(&self, _incoming: Vector3<f32>, normal: Vector3<f3
         let diffuse = albedo * (diffuse_weight / PI);
 
         diffuse + specular
+    }
+
+    /// Evaluate the **transmissive** lobe (BTDF) for a specific pair of directions.
+    ///
+    /// Call this during next-event estimation when light arrives from **behind** the
+    /// surface (i.e. `n·l < 0`) and the material is transmissive. Uses the GGX
+    /// microfacet BTDF (Walter et al. 2007).
+    ///
+    /// * `light_dir`  – unit vector pointing **toward** the light (below the surface, `n·l < 0`).
+    /// * `view_dir`   – unit vector pointing **toward** the viewer (above the surface, `n·v > 0`).
+    /// * `eta_i`      – IOR on the viewer's side (use [`IOR_AIR`] if the viewer is in air).
+    /// * `eta_t`      – IOR on the light's side (typically `self.ior()` for glass/water).
+    pub fn evaluate_btdf(
+        &self,
+        light_dir: &Vector3<f32>,
+        view_dir: &Vector3<f32>,
+        normal: &Vector3<f32>,
+        albedo: &Vector3<f32>,
+        cached_textures: &mut CachedTextureLookups,
+        eta_i: f32,
+        eta_t: f32,
+    ) -> Vector3<f32> {
+        if self.transmission_factor <= 0.0 {
+            return Vector3::zeros();
+        }
+
+        let n_dot_v = normal.dot(view_dir);
+        let n_dot_l = normal.dot(light_dir);
+
+        // Viewer must be above the surface, light must be below it.
+        if n_dot_v <= 0.0 || n_dot_l >= 0.0 {
+            return Vector3::zeros();
+        }
+
+        // Refraction half-vector (Walter et al. 2007, eq. 16).
+        // Points into the same hemisphere as the normal.
+        let h_unnorm = -(eta_i * view_dir + eta_t * light_dir);
+        if h_unnorm.norm_squared() < 1e-12 {
+            return Vector3::zeros();
+        }
+        let h = {
+            let h = h_unnorm.normalize();
+            if normal.dot(&h) < 0.0 { -h } else { h }
+        };
+
+        let v_dot_h = view_dir.dot(&h).max(0.0);
+        // light_dir points away from the viewer, so negate it to get the
+        // cosine of the angle between h and the light-side ray.
+        let l_dot_h = (-light_dir).dot(&h).max(0.0);
+        let n_dot_h  = normal.dot(&h).max(0.0);
+
+        let alpha  = self.alpha(cached_textures);
+        let d      = Self::ggx_ndf(n_dot_h, alpha);
+        let g      = Self::smith_geometry(n_dot_v, n_dot_l.abs(), alpha);
+
+        let f0 = self.f0_from_albedo(albedo, cached_textures);
+        let f  = Self::schlick_fresnel(v_dot_h, f0);
+        let one_minus_f = Vector3::repeat(1.0) - f;
+
+        // Jacobian of the refraction half-vector mapping (Walter et al. eq. 17).
+        let denom = eta_i * v_dot_h + eta_t * l_dot_h;
+        if denom.abs() < 1e-8 {
+            return Vector3::zeros();
+        }
+
+        let jacobian = (eta_t * eta_t * l_dot_h * v_dot_h) / (n_dot_v * n_dot_l.abs() * denom * denom);
+
+        one_minus_f.component_mul(&(albedo * d * g * jacobian.abs() * self.transmission_factor))
     }
 
     fn alpha(&self, cached_textures: &mut CachedTextureLookups) -> f32 {
