@@ -7,6 +7,7 @@ use nalgebra::Vector3;
 use std::path::Path;
 use gltf::texture::WrappingMode;
 use serde::Deserialize;
+use url_encor::Encoder;
 use crate::context::Context;
 
 #[derive(Deserialize)]
@@ -36,7 +37,7 @@ fn create_texture_internal(texture: &texture::Texture, folder: &Path, ctx: &Cont
     match source.source() {
         Source::View { .. } => panic!("Unexpected source: view"),
         Source::Uri { uri, mime_type: _mime_type } => {
-            let uri = uri.replace("%20", " "); // TODO: Quick fix. Probably have to do proper URL decoding.
+            let uri = uri.url_decode();
             let image_path = folder.join(uri);
             let img = match image::open(&image_path) {
                 Ok(img) => img,
