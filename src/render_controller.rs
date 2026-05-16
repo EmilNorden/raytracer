@@ -1,15 +1,16 @@
 use crate::animation::controller::{AnimationController, AnimationState};
 use crate::context::Context;
-use crate::denoise::{DenoiseFilter, Denoiser};
+use crate::denoise::{Denoiser};
 use crate::frame::Frame;
 use crate::integrator::integrator::{Integrator, IntegratorImpl};
-use crate::options::RenderOptions;
+use crate::options::{FocalDistance, RenderOptions};
 use crate::scene::scene::Scene;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+use crate::camera::viewpoint::Viewpoint;
 
 pub struct RenderUpdate {
     pub sample: u32,
@@ -49,13 +50,27 @@ impl RenderController {
             let mut stop_video = false;
             let mut frame_index = 0;
 
+            let mut camera = scene.active_camera().clone();
+
+            if let Some(dof) = &options.depth_of_field {
+                match dof.focal_distance {
+                    FocalDistance::Fixed(val) => camera.set_focal_distance(val),
+                    FocalDistance::Auto(u, v) => {
+                        let focus_ray = scene.active_camera().generate_ray(u, v);
+                        if let Some(focus_hit) = scene.intersect(&focus_ray, &ctx) {
+                            camera.set_focal_distance(focus_hit.intersection.dist)
+                        }
+                    }
+                }
+            }
+
             loop {
                 for sample in 1..=options.samples {
                     if Self::should_stop(&command_rx) {
                         break;
                     }
 
-                    integrator.integrate(&scene, &mut frame, options.samples, &options, &ctx);
+                    integrator.integrate(&scene, &camera, &mut frame, options.samples, &options, &ctx);
 
                     let mut rgba = vec![0_u8; (frame.width() * frame.height() * 4) as usize];
                     frame.write_rgba(&mut rgba);
@@ -73,7 +88,7 @@ impl RenderController {
                             .join(format!("out{:04}.png", frame_index));
                         frame.save(path.clone());
 
-                        let denoise_result = denoiser.denoise(&frame, &scene, options.samples, &options, &ctx);
+                        let denoise_result = denoiser.denoise(&frame, &scene, &camera, options.samples, &options, &ctx);
 
                         let path = std::path::Path::new(&options.output_folder)
                             .join(format!("out{:04}_denoised.png", frame_index));

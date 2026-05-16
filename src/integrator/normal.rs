@@ -1,12 +1,13 @@
-use rayon::prelude::*;
-use nalgebra::{Vector2, Vector3};
-use rayon::prelude::ParallelSliceMut;
+use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::camera::viewpoint::Viewpoint;
 use crate::context::Context;
 use crate::frame::Frame;
 use crate::integrator::integrator::Integrator;
-use crate::options::{FocalDistance, RenderOptions};
+use crate::options::RenderOptions;
 use crate::scene::scene::Scene;
+use nalgebra::{Vector2, Vector3};
+use rayon::prelude::ParallelSliceMut;
+use rayon::prelude::*;
 
 pub struct NormalIntegrator {}
 
@@ -17,27 +18,12 @@ impl NormalIntegrator {
 }
 
 impl Integrator for NormalIntegrator {
-    fn integrate(&self, scene: &Scene, frame: &mut Frame, _samples: u32, options: &RenderOptions, ctx: &Context) {
+    fn integrate(&self, scene: &Scene, camera: &PerspectiveCamera, frame: &mut Frame, _samples: u32, options: &RenderOptions, ctx: &Context) {
         let width = frame.width() as usize;
         let height = frame.height() as usize;
 
         let height_inv = 1.0 / height as f32;
         let width_inv = 1.0 / width as f32;
-
-        // TODO: Should every integrator really do this stuff? Perhaps do it outside and make Camera a part of the function parameters?
-        let mut camera = scene.active_camera().clone();
-        if let Some(dof) = &options.depth_of_field {
-            match dof.focal_distance {
-                FocalDistance::Fixed(val) => camera.set_focal_distance(val),
-                FocalDistance::Auto(u, v) => {
-                    let focus_ray = scene.active_camera().generate_ray(u, v);
-                    if let Some(focus_hit) = scene.intersect(&focus_ray, ctx) {
-                        camera.set_focal_distance(focus_hit.intersection.dist)
-                    }
-                }
-            }
-        }
-
 
         frame
             .pixels_mut()

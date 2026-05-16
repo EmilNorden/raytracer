@@ -39,6 +39,8 @@ fn bench_render(c: &mut Criterion) {
 
         let (scene, _animation_controller) =
             GltfLoader::load_scene(&options.scene_file, &options, &ctx).unwrap();
+
+        let camera = scene.active_camera().clone();
         let integrator = IntegratorImpl::Pathtracing(PathTracingIntegrator::new());
 
         #[cfg(any(feature = "diagnostics", feature = "statistics"))]
@@ -51,7 +53,7 @@ fn bench_render(c: &mut Criterion) {
             b.iter_batched(
                 || Frame::new(opts.resolution.width, opts.resolution.height),
                 |mut frame| {
-                    integrator.integrate(&scene, &mut frame, opts.samples, &opts, &ctx);
+                    integrator.integrate(&scene, &camera, &mut frame, opts.samples, &opts, &ctx);
                 },
                 BatchSize::SmallInput,
             )

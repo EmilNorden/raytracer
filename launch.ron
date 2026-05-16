@@ -15,7 +15,7 @@ RenderOptions(
     )),
     integrator: Pathtracing,
     depth_of_field: Some(DofSettings(
-        aperture_size: 0.0125,
-        focal_distance: Auto(0.5, 0.5),
+        aperture_size: 0.01,
+        focal_distance: Fixed(1.0),
     )),
 )

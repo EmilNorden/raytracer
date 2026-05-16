@@ -4,6 +4,7 @@ mod oidn;
 mod passthrough;
 
 use std::io::Write;
+use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::context::Context;
 use crate::frame::Frame;
 use crate::integrator::albedo::AlbedoIntegrator;
@@ -68,7 +69,7 @@ pub struct Denoiser {
 }
 
 impl Denoiser {
-    pub fn denoise(&self, frame: &Frame, scene: &Scene, samples: u32, options: &RenderOptions, ctx: &Context) -> DenoiseResult {
+    pub fn denoise(&self, frame: &Frame, scene: &Scene, camera: &PerspectiveCamera, samples: u32, options: &RenderOptions, ctx: &Context) -> DenoiseResult {
 
         let albedo = if self.settings.auxiliary_albedo {
             if self.denoise_filter.supports_auxiliary_albedo() {
@@ -76,7 +77,7 @@ impl Denoiser {
                 print!("Creating auxiliary albedo frame for denoising...");
                 let mut albedo_frame = Frame::new(frame.width(), frame.height());
                 for _ in 0..samples {
-                    albedo_integrator.integrate(&scene, &mut albedo_frame, samples, options, &ctx);
+                    albedo_integrator.integrate(scene, camera, &mut albedo_frame, samples, options, &ctx);
                 }
                 println!("Done.");
                 Some(albedo_frame)
@@ -96,7 +97,7 @@ impl Denoiser {
                 std::io::stdout().flush().unwrap();
                 let mut normal_frame = Frame::new(frame.width(), frame.height());
                 for _ in 0..samples {
-                    normal_integrator.integrate(&scene, &mut normal_frame, samples, options, &ctx);
+                    normal_integrator.integrate(scene, camera, &mut normal_frame, samples, options, &ctx);
                 }
 
                 println!("Done.");

@@ -50,7 +50,7 @@ pub struct DofSettings {
 impl Default for DofSettings {
     fn default() -> Self {
         Self {
-            focal_distance: FocalDistance::Fixed(f32::MAX),
+            focal_distance: FocalDistance::Fixed(1.0),
             aperture_size: 0.0,
         }
     }
