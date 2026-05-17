@@ -37,7 +37,13 @@ impl GltfLoader {
             .extras()
             .as_ref()
             .and_then(|extras| {
-                gltf::json::deserialize::from_str::<PointLightExtras>(extras.get()).ok()
+                match gltf::json::deserialize::from_str::<PointLightExtras>(extras.get()) {
+                    Ok(parsed) => Some(parsed),
+                    Err(e) => {
+                        eprintln!("Failed to deserialize point light extras: {}", e);
+                        None
+                    }
+                }
             })
             .and_then(|extras| extras.radius)
             .unwrap_or(0.0)

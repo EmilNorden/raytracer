@@ -57,6 +57,16 @@ impl Default for DofSettings {
     }
 }
 
+impl Display for DofSettings {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DofSettings {{ focal_distance: {}, aperture_size: {} }}", match &self.focal_distance {
+            FocalDistance::Fixed(d) => format!("Fixed({})", d),
+            FocalDistance::Auto(min, max) => format!("Auto({}, {})", min, max),
+            FocalDistance::Object(name) => format!("Object({})", name),
+        }, self.aperture_size)
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RenderOptions {
     pub scene_file: String,
@@ -120,6 +130,10 @@ impl Display for RenderOptions {
         writeln!(f, "  video: {}", self.video)?;
         writeln!(f, "  frame_rate: {}", self.frame_rate)?;
         writeln!(f, "  denoise: {}", self.denoise)?;
-        write!(f, "  integrator: {}", self.integrator)
+        writeln!(f, "  integrator: {}", self.integrator)?;
+        match &self.depth_of_field {
+            Some(dof) => write!(f, "  depth_of_field: {}", dof),
+            None => write!(f, "  depth_of_field: None"),
+        }
     }
 }
