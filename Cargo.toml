@@ -10,9 +10,9 @@ statistics = []
 open_image_denoise = ["oidn"]
 
 [dependencies]
-nalgebra = "0.33.2"
-image = "0.25.6"
-anyhow = "1.0.97"
+nalgebra = "0.33"
+image = "0.25"
+anyhow = "1.0"
 rand = "0.9.1"
 rayon = "1.10.0"
 gltf = { version = "1.4.1", features = ["import", "KHR_materials_ior", "KHR_materials_transmission", "KHR_materials_emissive_strength", "KHR_texture_transform", "KHR_lights_punctual", "extras"] }

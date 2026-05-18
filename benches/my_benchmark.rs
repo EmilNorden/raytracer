@@ -37,7 +37,7 @@ fn bench_render(c: &mut Criterion) {
 
         let ctx = Context::new();
 
-        let (scene, _animation_controller) =
+        let (scene, _node_graph, _animation_controller) =
             GltfLoader::load_scene(&options.scene_file, &options, &ctx).unwrap();
 
         let camera = scene.active_camera().clone();
