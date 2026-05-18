@@ -20,6 +20,7 @@ pub struct RenderUpdate {
     pub rgba: Vec<u8>,
     pub is_done: bool,
     pub elapsed: Duration,
+    pub eta: Option<Duration>,
     pub output_path: Option<PathBuf>,
 }
 
@@ -51,6 +52,7 @@ impl RenderController {
             let render_start = Instant::now();
 
             let frame_duration = 1.0 / options.frame_rate as f32;
+            let total_frames = animation_controller.calculate_total_frames(frame_duration);
             let mut stop_video = false;
             let mut frame_index = 0;
 
@@ -109,11 +111,31 @@ impl RenderController {
                         None
                     };
 
+                    fn current_frame_eta(sample: u32, total_samples: u32, elapsed: Duration, ) -> Option<Duration> {
+                        if sample > 1 {
+                            let samples_per_sec = sample as f32 / elapsed.as_secs_f32();
+                            let remaining_samples = total_samples - sample;
+                            Some(Duration::from_secs_f32(remaining_samples as f32 / samples_per_sec))
+                        } else {
+                            None
+                        }
+                    }
+
+                    let eta = if options.video {
+                        let frame_eta = current_frame_eta(sample, options.samples, render_start.elapsed());
+                        frame_eta.map(|eta| eta * (total_frames-frame_index))
+                    } else {
+                        current_frame_eta(sample, options.samples, render_start.elapsed())
+                    };
+
+
+
                     let update = RenderUpdate {
                         sample,
                         rgba,
                         is_done,
                         elapsed: render_start.elapsed(),
+                        eta,
                         output_path,
                     };
 

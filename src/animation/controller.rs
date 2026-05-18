@@ -45,6 +45,10 @@ impl AnimationController {
         None
     }
 
+    pub fn calculate_total_frames(&self, delta_time: f32) -> u32 {
+        (self.last_timestamp / delta_time) as u32
+    }
+
     pub fn step(&mut self, delta_time: f32, node_graph: &mut NodeGraph, scene: &mut Scene) -> AnimationState {
         self.time += delta_time;
 

@@ -11,6 +11,7 @@ use crate::integrator::albedo::AlbedoIntegrator;
 use crate::integrator::integrator::Integrator;
 use crate::integrator::normal::NormalIntegrator;
 use crate::options::{DenoiseAlgorithm, DenoiseSettings, RenderOptions};
+use crate::output::{TaskOutput};
 use crate::scene::scene::Scene;
 
 pub enum DenoiseImpl {
@@ -74,12 +75,12 @@ impl Denoiser {
         let albedo = if self.settings.auxiliary_albedo {
             if self.denoise_filter.supports_auxiliary_albedo() {
                 let albedo_integrator = AlbedoIntegrator {};
-                print!("Creating auxiliary albedo frame for denoising...");
+                let task = TaskOutput::new("Creating auxiliary albedo frame for denoising");
                 let mut albedo_frame = Frame::new(frame.width(), frame.height());
                 for _ in 0..samples {
                     albedo_integrator.integrate(scene, camera, &mut albedo_frame, samples, options, &ctx);
                 }
-                println!("Done.");
+                task.done();
                 Some(albedo_frame)
             }
             else {
@@ -93,14 +94,14 @@ impl Denoiser {
         let normal = if self.settings.auxiliary_normal {
             if self.denoise_filter.supports_auxiliary_normal() {
                 let normal_integrator = NormalIntegrator {};
-                print!("Creating auxiliary normal frame for denoising...");
+                let task = TaskOutput::new("Creating auxiliary normal frame for denoising");
                 std::io::stdout().flush().unwrap();
                 let mut normal_frame = Frame::new(frame.width(), frame.height());
                 for _ in 0..samples {
                     normal_integrator.integrate(scene, camera, &mut normal_frame, samples, options, &ctx);
                 }
 
-                println!("Done.");
+                task.done();
                 Some(normal_frame)
             }
             else {
@@ -111,10 +112,9 @@ impl Denoiser {
             None
         };
 
-        print!("Denoising frame...");
-        std::io::stdout().flush().unwrap();
+        let task = TaskOutput::new("Denoising");
         let result = self.denoise_filter.denoise(frame, &albedo, &normal);
-        println!("Done.");
+        task.done();
 
         DenoiseResult { denoised_frame: result, auxiliary_albedo: albedo, auxiliary_normal: normal }
     }

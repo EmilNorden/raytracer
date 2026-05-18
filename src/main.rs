@@ -1,5 +1,6 @@
+use std::io::Write;
 use std::sync::Arc;
-
+use humantime::format_duration;
 use pixels::{Pixels, SurfaceTexture};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, Size};
@@ -51,6 +52,12 @@ impl App {
                 if let Some(path) = update.output_path {
                     println!("Saved frame to {}", path.display());
                 }
+            }
+            else {
+                print!("\r\x1b[2KETA: {}", update.eta
+                    .map(|eta| format_duration(eta).to_string())
+                    .unwrap_or_else(|| "N/A".to_string()));
+                std::io::stdout().flush().unwrap();
             }
 
             self.is_done = update.is_done;
