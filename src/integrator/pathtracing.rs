@@ -149,11 +149,24 @@ impl PathTracingIntegrator {
                             &albedo,
                             &mut cached_textures,
                         );
+
+                        let light_pdf_omega = light_sample.pdf * distance_sq / cos_theta_light.max(1e-6);
+                        let bsdf_pdf = material.bsdf_pdf(
+                            &light_dir,
+                            &view_dir,
+                            &normal,
+                            &albedo,
+                            &mut cached_textures,
+                        );
+
+                        let mis_weight = Self::power_heuristic(light_pdf_omega, bsdf_pdf);
+
                         direct_light = (light_sample.radiance
                             * (cos_theta_light / (distance_sq * light_sample.pdf)))
                             .component_mul(&brdf)
                             .component_mul(&transmission)
-                            * cos_theta;
+                            * cos_theta
+                            * mis_weight;
                     }
                 }
             }
@@ -287,6 +300,16 @@ impl PathTracingIntegrator {
         }
 
         radiance
+    }
+
+    fn power_heuristic(pdf_a: f32, pdf_b: f32) -> f32 {
+        let a2 = pdf_a * pdf_a;
+        let b2 = pdf_b * pdf_b;
+        if a2 + b2 <= 1e-8 {
+            0.0
+        } else {
+            a2 / (a2 + b2)
+        }
     }
 }
 

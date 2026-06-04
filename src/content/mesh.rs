@@ -5,10 +5,9 @@ use crate::acceleration::kdtree::KDTree;
 use crate::content::triangle::{Triangle, IntersectTriangle, Vertex};
 use crate::core::Ray;
 use crate::scene::{Intersectable, Intersection, Shadeable};
-use crate::scene::material::Material;
 
 pub struct MeshData {
-    intersect_triangles: Vec<IntersectTriangle>,
+    triangles: Vec<IntersectTriangle>,
     vertices: Vec<Vertex>,
     tri_indices: Vec<[u32; 3]>,
     kd_tree: KDTree,
@@ -33,7 +32,7 @@ impl MeshData {
         let kd_tree = KDTree::new(&vertices, &tri_indices);
 
         Self {
-            intersect_triangles,
+            triangles: intersect_triangles,
             vertices,
             tri_indices,
             kd_tree,
@@ -41,8 +40,12 @@ impl MeshData {
         }
     }
 
+    pub fn triangles(&self) -> &[IntersectTriangle] {
+        &self.triangles
+    }
+
     fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Intersection> {
-        let closest_intersection = self.kd_tree.intersects(ray, &self.intersect_triangles);
+        let closest_intersection = self.kd_tree.intersects(ray, &self.triangles);
 
         closest_intersection.and_then(|(tri_index, x)| {
             if x.dist < t_min || x.dist > t_max {
@@ -161,6 +164,8 @@ impl MeshInstance {
         self.data.tri_indices.len()
     }
 
+    pub fn triangles(&self) -> &[IntersectTriangle] { self.data.triangles() }
+
     pub fn triangle_at(&self, index: usize) -> Triangle {
         let triangle = self.data.tri_indices.get(index).unwrap();
         let v0 = self.data.vertices.get(triangle[0] as usize).unwrap();
@@ -206,6 +211,7 @@ impl Shadeable for MeshInstance {
 mod tests {
     use nalgebra::{Matrix4, Vector4, Point3, Vector2};
     use crate::content::triangle::Vertex;
+    use crate::scene::material::Material;
     use super::*;
 
     fn create_test_mesh() -> Arc<MeshData> {

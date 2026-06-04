@@ -233,6 +233,22 @@ impl Material {
         (r_s * r_s + r_p * r_p) / 2.0
     }
 
+    pub fn bsdf_pdf(
+        &self,
+        light_dir: &Vector3<f32>,
+        _view_dir: &Vector3<f32>,
+        normal: &Vector3<f32>,
+        _albedo: &Vector3<f32>,
+        _cached_textures: &mut CachedTextureLookups,
+    ) -> f32 {
+        // temporary simple version
+        let n_dot_l = normal.dot(light_dir).max(0.0);
+        if n_dot_l <= 0.0 {
+            return 0.0;
+        }
+
+        n_dot_l / PI
+    }
 
     /// Sample one BSDF lobe and return the sampled direction together with the
     /// corresponding BSDF value and the PDF of generating that sample.

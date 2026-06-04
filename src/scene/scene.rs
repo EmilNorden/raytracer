@@ -3,11 +3,13 @@ use crate::acceleration::bvh::BVH;
 use crate::camera::perspective_camera::PerspectiveCamera;
 use crate::content::mesh::MeshInstance;
 use crate::core::Ray;
-use crate::scene::light::LightSource;
-use crate::scene::{Intersectable, Intersection, Shadeable, ShadingContext};
+use crate::scene::light::{EmissiveMesh, LightSource};
+use crate::scene::{Intersection, Shadeable, ShadingContext};
 use nalgebra::{Point3, Vector3};
 use crate::context::Context;
+use crate::math;
 use crate::math::lerp;
+use crate::output::TaskOutput;
 use crate::scene::material::Material;
 
 pub struct Scene {
@@ -87,6 +89,27 @@ impl Display for Scene {
 }
 
 impl Scene {
+    pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, materials: Vec<Material>, mut lights: Vec<LightSource>) -> Self {
+        let t = TaskOutput::new("Building triangle CDFs for emissive meshes");
+        for mesh in &meshes {
+            let material = &materials[mesh.material_index() as usize];
+            if math::is_greater_than_zero(material.emissive_factor()){
+                lights.push(LightSource::Mesh(EmissiveMesh::new(mesh)))
+            }
+        }
+        t.done();
+
+        let bvh = BVH::new(&mut meshes, &materials);
+
+        Self {
+            cameras,
+            meshes,
+            bvh,
+            lights,
+            materials,
+        }
+    }
+
     pub fn intersections_along_path<'a>(&'a self, ray: Ray, distance: f32, ctx: &'a Context) -> PathIntersectionsIter<'a> {
 
         let t_min = 0.001;
@@ -101,26 +124,6 @@ impl Scene {
             ctx,
             done,
             hit_count: 0,
-        }
-    }
-
-    pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, materials: Vec<Material>, mut lights: Vec<LightSource>) -> Self {
-        for mesh in &meshes {
-            let material = &materials[mesh.material_index() as usize];
-            if material.emissive_factor().x > 0.0 || material.emissive_factor().y > 0.0 || material.emissive_factor().z > 0.0 {
-                lights.push(LightSource::Mesh(mesh.clone()));
-            }
-        }
-
-        let bvh = BVH::new(&mut meshes, &materials);
-
-
-        Self {
-            cameras,
-            meshes,
-            bvh,
-            lights,
-            materials,
         }
     }
 
@@ -181,7 +184,7 @@ impl Scene {
                     return Some(LightSample {
                         wi: Vector3::zeros(),
                         radiance,
-                        pdf: 1.0,
+                        pdf: 1.0 / self.lights.len() as f32,
                         is_delta: true,
                         position: Some(point_light.position),
                     });
@@ -200,7 +203,7 @@ impl Scene {
                 let point = point_light.position + direction * point_light.radius;
                 let normal = direction;
                 let area = 4.0 * std::f32::consts::PI * point_light.radius * point_light.radius;
-                let pdf = 1.0 / area;
+                let pdf = 1.0 / (self.lights.len() as f32 * area);
 
                 Some(LightSample {
                     wi: normal,
@@ -213,7 +216,7 @@ impl Scene {
             LightSource::Directional(directional_light) => {
                 let normal = -directional_light.direction.normalize(); // Light comes from this direction
 
-                let pdf = 1.0;
+                let pdf = 1.0 / self.lights.len() as f32;
 
                 let radiance = directional_light.color * directional_light.intensity;
 
@@ -226,21 +229,18 @@ impl Scene {
                 })
                 //Some((point, normal, emissive, pdf))
             },
-            LightSource::Mesh(mesh) => {
-                // Sample a random point on the mesh by sampling a random triangle
-                let triangle_index = rng.random_range(..mesh.triangle_count() as usize);
+            LightSource::Mesh(emissive_mesh) => {
+                // Use the CDF (Cumulative Distribution Function) to sample a triangle based on its area
+                let triangle_index = emissive_mesh.cdf.sample(rng);
 
-                let triangle = mesh.triangle_at(triangle_index);
+                let triangle = emissive_mesh.mesh.triangle_at(triangle_index);
 
                 let (point, normal) = triangle.sample_uniform_point(rng);
 
-                let material = &self.materials[mesh.material_index() as usize];
+                let material = &self.materials[emissive_mesh.mesh.material_index() as usize];
                 let radiance = material.emissive_factor();
 
-                // PDF is 1/area. For now, use a rough estimate
-                let bounds = mesh.bounds();
-                let area = (bounds.max().x - bounds.min().x) * (bounds.max().z - bounds.min().z);
-                let pdf = 1.0 / area;
+                let pdf = 1.0 / (self.lights.len() as f32 * emissive_mesh.total_area());
 
                 Some(LightSample {
                     wi: normal,
@@ -249,7 +249,6 @@ impl Scene {
                     is_delta: false,
                     position: Some(point),
                 })
-                //Some((point, normal, emissive, pdf))
             }
         }
     }

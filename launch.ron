@@ -1,11 +1,12 @@
 RenderOptions(
     scene_file: "/Users/emilnorden/models/cars/direct.gltf",
+    // scene_file: "/Users/emilnorden/code/raytracer/benches/refr/refr.gltf",
     output_folder: "output",
     resolution: Resolution(
         width: 960,
         height: 540,
     ),
-    samples: 100,
+    samples: 10,
     max_bounces: 4,
     video: false,
     frame_rate: 60,

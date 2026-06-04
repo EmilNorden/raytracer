@@ -90,6 +90,11 @@ impl IntersectTriangle {
             None // Line intersection but not a ray intersection.
         }
     }
+
+    pub fn area(&self) -> f32 {
+        let cross = self.edge1.cross(&self.edge2);
+        0.5 * cross.norm()
+    }
 }
 
 impl Triangle {

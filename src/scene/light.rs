@@ -1,10 +1,28 @@
-use nalgebra::{Point3, Vector3};
 use crate::content::mesh::MeshInstance;
+use crate::scene::cdf::CDF;
+use nalgebra::{Point3, Vector3};
+
+pub struct EmissiveMesh {
+    pub mesh: MeshInstance,
+    pub cdf: CDF,
+}
+
+impl EmissiveMesh {
+    pub fn new(mesh: &MeshInstance) -> Self {
+        let cdf = CDF::new_from_iterator(
+            mesh.triangles(),
+            |triangle| triangle.area());
+
+        Self { mesh: mesh.clone(), cdf }
+    }
+
+    pub fn total_area(&self) -> f32 { self.cdf.total_weight() }
+}
 
 pub enum LightSource {
     Point(PointLight),
     Directional(DirectionalLight),
-    Mesh(MeshInstance),
+    Mesh(EmissiveMesh),
 }
 
 impl LightSource {
@@ -16,8 +34,9 @@ impl LightSource {
             LightSource::Directional(_) => {
                 // Do nothing
             }
-            LightSource::Mesh(mesh) => {
-                mesh.update_transform(transform);
+            LightSource::Mesh(emissive_mesh) => {
+                // TODO: Should we also update the CDF?
+                emissive_mesh.mesh.update_transform(transform);
             },
         }
     }
