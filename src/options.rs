@@ -73,7 +73,6 @@ pub struct RenderOptions {
     pub output_folder: String,
     pub resolution: Resolution,
     pub samples: u32,
-    pub max_bounces: u32,
     pub video: bool,
     pub frame_rate: u32,
     pub denoise: DenoiseAlgorithm,
@@ -126,7 +125,6 @@ impl Display for RenderOptions {
         writeln!(f, "  output_folder: {}", self.output_folder)?;
         writeln!(f, "  resolution: {}", self.resolution)?;
         writeln!(f, "  samples: {}", self.samples)?;
-        writeln!(f, "  max_bounces: {}", self.max_bounces)?;
         writeln!(f, "  video: {}", self.video)?;
         writeln!(f, "  frame_rate: {}", self.frame_rate)?;
         writeln!(f, "  denoise: {}", self.denoise)?;

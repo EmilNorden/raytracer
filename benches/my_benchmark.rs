@@ -29,7 +29,6 @@ fn bench_render(c: &mut Criterion) {
             samples,
             frame_rate: 0,
             denoise: DenoiseAlgorithm::None,
-            max_bounces: 4,
             video: false,
             integrator: raytracer::options::Integrator::Pathtracing,
             depth_of_field: None,
