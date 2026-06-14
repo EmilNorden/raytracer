@@ -236,18 +236,47 @@ impl Material {
     pub fn bsdf_pdf(
         &self,
         light_dir: &Vector3<f32>,
-        _view_dir: &Vector3<f32>,
+        view_dir: &Vector3<f32>,
         normal: &Vector3<f32>,
-        _albedo: &Vector3<f32>,
-        _cached_textures: &mut CachedTextureLookups,
+        albedo: &Vector3<f32>,
+        cached_textures: &mut CachedTextureLookups,
     ) -> f32 {
-        // temporary simple version
-        let n_dot_l = normal.dot(light_dir).max(0.0);
-        if n_dot_l <= 0.0 {
+        let n = *normal;
+        let l = light_dir.normalize();
+        let v = view_dir.normalize();
+
+        let n_dot_l = n.dot(&l).max(0.0);
+        let n_dot_v = n.dot(&v).max(0.0);
+        if n_dot_l <= 0.0 || n_dot_v <= 0.0 {
             return 0.0;
         }
 
-        n_dot_l / PI
+        let transmissive = self.transmission_factor > 0.0;
+        let alpha = self.alpha(cached_textures);
+        let f0 = self.f0_from_albedo(albedo, cached_textures);
+
+        let specular_prob = if transmissive {
+            1.0
+        } else {
+            self.specular_sampling_probability(&f0)
+        };
+
+        let diffuse_prob = if transmissive { 0.0 } else { 1.0 - specular_prob };
+
+        let pdf_diffuse = n_dot_l / PI;
+
+        let h_unnorm = (l + v);
+        let pdf_spec = if h_unnorm.norm_squared() > 1e-12 {
+            let h = h_unnorm.normalize();
+            let n_dot_h = n.dot(&h).max(0.0);
+            let v_dot_h = v.dot(&h).max(1e-6);
+            let d = Self::ggx_ndf(n_dot_h, alpha);
+            d * n_dot_h / (4.0 * v_dot_h)
+        } else {
+            0.0
+        };
+
+        diffuse_prob * pdf_diffuse + specular_prob * pdf_spec
     }
 
     /// Sample one BSDF lobe and return the sampled direction together with the
