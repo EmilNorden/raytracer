@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use nalgebra::{Matrix4, Point3, Vector3};
 use crate::core::Ray;
 
@@ -178,6 +179,25 @@ impl AABB {
     }
 
 
+}
+
+impl Display for AABB {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let size = self.max - self.min;
+        write!(
+            f,
+            "AABB(min=({}, {}, {}), max=({}, {}, {}), size=({}, {}, {}))",
+            self.min.x,
+            self.min.y,
+            self.min.z,
+            self.max.x,
+            self.max.y,
+            self.max.z,
+            size.x,
+            size.y,
+            size.z,
+        )
+    }
 }
 
 #[cfg(test)]
