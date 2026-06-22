@@ -9,6 +9,7 @@ use nalgebra::{Point3, Vector3};
 use crate::context::Context;
 use crate::math;
 use crate::math::lerp;
+use crate::medium::Medium;
 use crate::output::TaskOutput;
 use crate::scene::material::Material;
 
@@ -18,6 +19,7 @@ pub struct Scene {
     bvh: BVH,
     lights: Vec<LightSource>,
     materials: Vec<Material>,
+    media: Vec<Medium>,
 }
 
 pub struct LightSample {
@@ -84,12 +86,12 @@ impl<'a> Iterator for PathIntersectionsIter<'a> {
 
 impl Display for Scene {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Scene with {} cameras, {} meshes, {} lights. Total triangles: {}", self.cameras.len(), self.meshes.len(), self.lights.len(), self.triangle_count())
+        write!(f, "Scene with {} cameras, {} meshes, {} lights. Total triangles: {}. World bounds: {}", self.cameras.len(), self.meshes.len(), self.lights.len(), self.triangle_count(), self.bvh.bounds())
     }
 }
 
 impl Scene {
-    pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, materials: Vec<Material>, mut lights: Vec<LightSource>) -> Self {
+    pub fn new(cameras: Vec<PerspectiveCamera>, mut meshes: Vec<MeshInstance>, materials: Vec<Material>, mut lights: Vec<LightSource>, media: Vec<Medium>) -> Self {
         let t = TaskOutput::new("Building triangle CDFs for emissive meshes");
         for mesh in &meshes {
             let material = &materials[mesh.material_index() as usize];
@@ -107,6 +109,7 @@ impl Scene {
             bvh,
             lights,
             materials,
+            media,
         }
     }
 
@@ -147,6 +150,10 @@ impl Scene {
 
     pub fn lights_mut(&mut self) -> &mut [LightSource] {
         &mut self.lights
+    }
+
+    pub fn media(&self) -> &[Medium] {
+        &self.media
     }
 
     pub fn intersect(&'_ self, ray: &Ray, ctx: &Context) -> Option<ShadingContext> {
