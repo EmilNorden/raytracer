@@ -61,6 +61,10 @@ impl BVH {
         }
     }
 
+    pub fn bounds(&self) -> AABB {
+        self.nodes[0].bbox
+    }
+
     pub fn intersect(&self, items: &[MeshInstance], ray: &Ray, ctx: &Context) -> Option<(u32, Intersection)> {
         self.intersect_with_limits(items, ray, 0.0, f32::INFINITY, ctx)
     }

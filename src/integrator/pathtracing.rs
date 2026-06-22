@@ -247,6 +247,20 @@ impl PathTracingIntegrator {
         }
     }
 
+    fn evaluate_participating_media(
+        hit: &ShadingContext,
+        ray: &Ray,
+        scene: &Scene) -> f32 {
+        let mut transmittance = 1.0;
+        for medium in scene.media() {
+            if let Some(medium_hit) = medium.sample(ray, hit.intersection.dist) {
+                transmittance = transmittance * medium_hit.transmittance;
+            }
+        }
+
+        transmittance
+    }
+
     fn trace(
         ray: &Ray,
         scene: &Scene,
@@ -283,7 +297,13 @@ impl PathTracingIntegrator {
                 ctx,
             );
 
-            radiance += throughput.component_mul(&shade.radiance);
+            let transmittance = Self::evaluate_participating_media(
+                &hit,
+                &ray,
+                scene
+            );
+
+            radiance += throughput.component_mul(&shade.radiance) * transmittance;
 
             let Some(next_ray) = shade.next_ray else {
                 break;

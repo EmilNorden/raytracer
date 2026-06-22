@@ -1,5 +1,5 @@
 RenderOptions(
-    scene_file: "/Users/emilnorden/models/alley/alley.gltf",
+    scene_file: "/Users/emilnorden/models/hall/hall.gltf",
     // scene_file: "/Users/emilnorden/code/raytracer/benches/refr/refr.gltf",
     output_folder: "output",
     resolution: Resolution(

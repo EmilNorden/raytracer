@@ -14,3 +14,5 @@ pub mod math;
 pub mod consts;
 pub mod denoise;
 pub mod output;
+
+pub mod medium;

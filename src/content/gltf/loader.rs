@@ -21,7 +21,9 @@ use nalgebra::{Matrix4, Point3, Quaternion, UnitQuaternion, Vector2, Vector3, Ve
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
+use crate::acceleration::bounds::AABB;
 use crate::context::Context;
+use crate::medium::Medium;
 
 #[derive(Deserialize)]
 struct PointLightExtras {
@@ -382,7 +384,7 @@ impl SceneLoader for GltfLoader {
 
             if cameras.is_empty() { return Err(SceneError::NoCameras.into()); }
 
-            let scene = Scene::new(cameras, meshes, materials, lights);
+            let scene = Scene::new(cameras, meshes, materials, lights, Vec::new());
             println!("Loaded scene {}", scene);
 
             Ok((scene, node_graph, AnimationController::new(animations)))
