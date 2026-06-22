@@ -54,8 +54,8 @@ impl Texture {
                 v = v.clamp(0.0, 1.0);
             },
             WrapMode::Repeat => {
-                u = u.fract();
-                v = v.fract();
+                u = u.rem_euclid(1.0);
+                v = v.rem_euclid(1.0);
             },
             WrapMode::MirroredRepeat => {
                 u = (u.fract() + 0.5).fract();
